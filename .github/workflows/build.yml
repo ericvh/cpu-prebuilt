@@ -1,0 +1,119 @@
+name: Build CPU Binaries
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+  schedule:
+    # Run weekly on Sundays at 00:00 UTC to check for new u-root releases
+    - cron: '0 0 * * 0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+    
+    - name: Clone u-root repository
+      run: |
+        git clone https://github.com/u-root/u-root.git
+        cd u-root
+        echo "U_ROOT_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
+        echo "Building u-root version: $(git describe --tags --always)"
+    
+    - name: Install dependencies
+      run: |
+        cd u-root
+        go mod download
+    
+    - name: Build cpu binary for aarch64
+      run: |
+        cd u-root
+        mkdir -p ../binaries
+        echo "Building cpu binary..."
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpu ./cmds/core/cpu
+        echo "cpu binary built successfully"
+        file ../binaries/cpu
+    
+    - name: Build cpud binary for aarch64
+      run: |
+        cd u-root
+        echo "Building cpud binary..."
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpud ./cmds/core/cpud
+        echo "cpud binary built successfully"
+        file ../binaries/cpud
+    
+    - name: Verify binaries
+      run: |
+        echo "Verifying built binaries..."
+        ls -la binaries/
+        echo "CPU binary info:"
+        file binaries/cpu
+        echo "CPUD binary info:"
+        file binaries/cpud
+        echo "Binary sizes:"
+        du -h binaries/*
+    
+    - name: Create build info
+      run: |
+        cd binaries
+        echo "U-Root CPU Binaries for aarch64" > BUILD_INFO.txt
+        echo "Built on: $(date -u)" >> BUILD_INFO.txt
+        echo "U-Root version: $U_ROOT_VERSION" >> BUILD_INFO.txt
+        echo "Target architecture: linux/arm64" >> BUILD_INFO.txt
+        echo "Go version: $(go version)" >> BUILD_INFO.txt
+        echo "" >> BUILD_INFO.txt
+        echo "Files in this archive:" >> BUILD_INFO.txt
+        echo "- cpu: CPU client binary" >> BUILD_INFO.txt
+        echo "- cpud: CPU daemon binary" >> BUILD_INFO.txt
+        echo "" >> BUILD_INFO.txt
+        echo "Usage:" >> BUILD_INFO.txt
+        echo "  ./cpu -h    # Show CPU client help" >> BUILD_INFO.txt
+        echo "  ./cpud -h   # Show CPU daemon help" >> BUILD_INFO.txt
+        cat BUILD_INFO.txt
+    
+    - name: Upload binaries as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: cpu-binaries-aarch64
+        path: binaries/
+        retention-days: 90
+    
+    - name: Create release (on tag)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          binaries/cpu
+          binaries/cpud
+          binaries/BUILD_INFO.txt
+        body: |
+          Prebuilt CPU binaries for aarch64 (ARM64)
+          
+          Built from u-root version: ${{ env.U_ROOT_VERSION }}
+          
+          **Files:**
+          - `cpu` - CPU client binary for aarch64
+          - `cpud` - CPU daemon binary for aarch64
+          - `BUILD_INFO.txt` - Build information and usage notes
+          
+          **Usage:**
+          ```bash
+          # Make binaries executable
+          chmod +x cpu cpud
+          
+          # Show help
+          ./cpu -h
+          ./cpud -h
+          ```
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

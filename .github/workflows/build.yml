@@ -7,7 +7,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
   schedule:
-    # Run weekly on Sundays at 00:00 UTC to check for new u-root releases
+    # Run weekly on Sundays at 00:00 UTC to check for new cpu releases
     - cron: '0 0 * * 0'
 
 jobs:
@@ -23,32 +23,32 @@ jobs:
       with:
         go-version: '1.21'
     
-    - name: Clone u-root repository
+    - name: Clone u-root/cpu repository
       run: |
-        git clone https://github.com/u-root/u-root.git
-        cd u-root
-        echo "U_ROOT_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
-        echo "Building u-root version: $(git describe --tags --always)"
+        git clone https://github.com/u-root/cpu.git
+        cd cpu
+        echo "CPU_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
+        echo "Building u-root/cpu version: $(git describe --tags --always)"
     
     - name: Install dependencies
       run: |
-        cd u-root
+        cd cpu
         go mod download
     
     - name: Build cpu binary for aarch64
       run: |
-        cd u-root
+        cd cpu
         mkdir -p ../binaries
         echo "Building cpu binary..."
-        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpu ./cmds/core/cpu
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpu ./cmds/cpu
         echo "cpu binary built successfully"
         file ../binaries/cpu
     
     - name: Build cpud binary for aarch64
       run: |
-        cd u-root
+        cd cpu
         echo "Building cpud binary..."
-        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpud ./cmds/core/cpud
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpud ./cmds/cpud
         echo "cpud binary built successfully"
         file ../binaries/cpud
     
@@ -68,7 +68,7 @@ jobs:
         cd binaries
         echo "U-Root CPU Binaries for aarch64" > BUILD_INFO.txt
         echo "Built on: $(date -u)" >> BUILD_INFO.txt
-        echo "U-Root version: $U_ROOT_VERSION" >> BUILD_INFO.txt
+        echo "CPU version: $CPU_VERSION" >> BUILD_INFO.txt
         echo "Target architecture: linux/arm64" >> BUILD_INFO.txt
         echo "Go version: $(go version)" >> BUILD_INFO.txt
         echo "" >> BUILD_INFO.txt
@@ -99,7 +99,7 @@ jobs:
         body: |
           Prebuilt CPU binaries for aarch64 (ARM64)
           
-          Built from u-root version: ${{ env.U_ROOT_VERSION }}
+          Built from u-root/cpu version: ${{ env.CPU_VERSION }}
           
           **Files:**
           - `cpu` - CPU client binary for aarch64

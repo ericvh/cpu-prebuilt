@@ -22,21 +22,21 @@ echo "Using Go version: $GO_VERSION"
 mkdir -p binaries
 rm -f binaries/*
 
-echo "Cloning u-root repository..."
-if [ -d "u-root" ]; then
-    echo "u-root directory already exists, updating..."
-    cd u-root
+echo "Cloning u-root/cpu repository..."
+if [ -d "cpu" ]; then
+    echo "cpu directory already exists, updating..."
+    cd cpu
     git pull
     cd ..
 else
-    git clone https://github.com/u-root/u-root.git
+    git clone https://github.com/u-root/cpu.git
 fi
 
-cd u-root
+cd cpu
 
 # Get version info
-U_ROOT_VERSION=$(git describe --tags --always)
-echo "Building u-root version: $U_ROOT_VERSION"
+CPU_VERSION=$(git describe --tags --always)
+echo "Building u-root/cpu version: $CPU_VERSION"
 
 # Download dependencies
 echo "Downloading Go dependencies..."
@@ -44,11 +44,11 @@ go mod download
 
 # Build cpu binary
 echo "Building cpu binary for aarch64..."
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpu ./cmds/core/cpu
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpu ./cmds/cpu
 
 # Build cpud binary
 echo "Building cpud binary for aarch64..."
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpud ./cmds/core/cpud
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpud ./cmds/cpud
 
 cd ..
 
@@ -70,7 +70,7 @@ cd binaries
 cat > BUILD_INFO.txt << EOF
 U-Root CPU Binaries for aarch64 (Local Build)
 Built on: $(date -u)
-U-Root version: $U_ROOT_VERSION
+CPU version: $CPU_VERSION
 Target architecture: linux/arm64
 Go version: $(go version)
 

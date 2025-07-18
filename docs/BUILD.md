@@ -31,7 +31,7 @@ chmod +x cpu cpud
 The GitHub Action performs these steps:
 
 1. Sets up Go 1.21
-2. Clones the latest u-root repository
+2. Clones the latest u-root/cpu repository
 3. Cross-compiles both `cpu` and `cpud` for linux/arm64
 4. Verifies the binaries are correctly built
 5. Creates build metadata

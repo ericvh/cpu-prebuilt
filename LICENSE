@@ -30,5 +30,5 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ---
 
-Note: This project builds binaries from u-root (https://github.com/u-root/u-root)
+Note: This project builds binaries from u-root/cpu (https://github.com/u-root/cpu)
 which is also licensed under the BSD 3-Clause License.

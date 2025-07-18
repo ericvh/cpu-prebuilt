@@ -5,7 +5,7 @@ This project provides prebuilt binaries for u-root/cpu and u-root/cpud targeting
 ## What this does
 
 This repository uses GitHub Actions to:
-- Build `cpu` and `cpud` from the [u-root](https://github.com/u-root/u-root) project
+- Build `cpu` and `cpud` from the [u-root/cpu](https://github.com/u-root/cpu) project
 - Cross-compile for aarch64 (ARM64) architecture
 - Package the binaries as downloadable artifacts
 - Automatically rebuild on new releases or manual triggers
@@ -25,9 +25,9 @@ This repository uses GitHub Actions to:
 ## Architecture
 
 - **Target Architecture**: aarch64 (ARM64)
-- **Source**: [u-root/u-root](https://github.com/u-root/u-root)
+- **Source**: [u-root/cpu](https://github.com/u-root/cpu)
 - **Build Tool**: Go cross-compilation
 
 ## License
 
-The binaries are built from u-root which is licensed under the BSD 3-Clause License.
+The binaries are built from u-root/cpu which is licensed under the BSD 3-Clause License.

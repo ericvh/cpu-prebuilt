@@ -47,40 +47,22 @@ jobs:
     
     - name: Set up Go
       uses: actions/setup-go@v5
-      with:
-        go-version: '1.21'
     
-    - name: Clone u-root/cpu repository
+    - name: Get CPU version for metadata
       run: |
-        git clone https://github.com/u-root/cpu.git
-        cd cpu
+        cd build/repos/cpu
         echo "CPU_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
-
-    - name: Generate SSH keys
-      run: |
-        mkdir -p binaries
-        echo "Generating default SSH keys for CPU..."
-        ssh-keygen -t rsa -b 4096 -f binaries/identity -N "" -C "cpu-default-key"
-        echo "SSH keys generated:"
-        ls -la binaries/identity*
-    
-    - name: Build binaries
-      run: |
-        cd cpu
-        mkdir -p ../binaries
-        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpu ./cmds/cpu
-        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpud ./cmds/cpud
-        chmod +x ../binaries/*
     
     - name: Create Dockerfile
       run: |
         cat > Dockerfile << 'EOF'
         FROM scratch
-        COPY binaries/cpu /usr/local/bin/cpu
-        COPY binaries/cpud /usr/local/bin/cpud
-        COPY binaries/identity /etc/identity
-        COPY binaries/identity.pub /etc/identity.pub
-        COPY BUILD_INFO.txt /BUILD_INFO.txt
+        COPY build/binaries/cpu /usr/local/bin/cpu
+        COPY build/binaries/cpud /usr/local/bin/cpud
+        COPY build/binaries/identity /etc/identity
+        COPY build/binaries/identity.pub /etc/identity.pub
+        COPY build/binaries/BUILD_INFO.txt /BUILD_INFO.txt
+        COPY build/initramfs/cpud-initramfs.cpio.gz /cpud-initramfs.cpio.gz
         LABEL org.opencontainers.image.title="CPU Binaries"
         LABEL org.opencontainers.image.description="Prebuilt CPU binaries for aarch64 with SSH keys"
         LABEL org.opencontainers.image.source="https://github.com/${{ github.repository }}"
@@ -88,37 +70,11 @@ jobs:
         LABEL org.opencontainers.image.licenses="BSD-3-Clause"
         EOF
     
-    - name: Create build info
-      run: |
-        cat > BUILD_INFO.txt << EOF
-        U-Root CPU Binaries for aarch64 (Container Package)
-        Built on: $(date -u)
-        CPU version: ${{ env.CPU_VERSION }}
-        Target architecture: linux/arm64
-        Go version: $(go version)
-        Container registry: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        
-        Files in this package:
-        - /usr/local/bin/cpu: CPU client binary
-        - /usr/local/bin/cpud: CPU daemon binary
-        - /etc/identity: Default SSH private key
-        - /etc/identity.pub: Default SSH public key
-        
-        WARNING: These are default keys for convenience - generate your own for production!
-        
-        Usage:
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest /usr/local/bin/cpu -h
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest /usr/local/bin/cpud -h
-        
-        Extract SSH keys from container:
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest cat /etc/identity > identity
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest cat /etc/identity.pub > identity.pub
-        EOF
-    
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
+        file: ./Dockerfile
         platforms: linux/arm64
         push: true
         tags: ${{ steps.meta.outputs.tags }}

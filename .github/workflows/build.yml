@@ -36,136 +36,37 @@ jobs:
       with:
         go-version: '1.21'
     
-    - name: Clone u-root/cpu repository
+    - name: Build everything using Makefile
       run: |
-        mkdir -p build/repos
-        git clone https://github.com/u-root/cpu.git build/repos/cpu
+        echo "Building CPU binaries and initramfs using Makefile..."
+        make all
+        echo "Build completed successfully!"
+    
+    - name: Show build summary
+      run: |
+        echo "=== Build Summary ==="
+        ls -la build/binaries/
+        echo ""
+        echo "Binary info:"
+        file build/binaries/cpu build/binaries/cpud
+        echo ""
+        echo "SSH keys:"
+        ls -la build/binaries/identity*
+        echo ""
+        echo "Initramfs:"
+        ls -la build/initramfs/
+        echo ""
+        echo "Sizes:"
+        du -h build/binaries/* build/initramfs/*
+        echo ""
+        echo "Build info:"
+        cat build/binaries/BUILD_INFO.txt
+    
+    - name: Get CPU version for release naming
+      run: |
         cd build/repos/cpu
         echo "CPU_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
         echo "Building u-root/cpu version: $(git describe --tags --always)"
-    
-    - name: Clone u-root/u-root repository
-      run: |
-        git clone https://github.com/u-root/u-root.git build/repos/u-root
-    
-    - name: Set up Go workspace
-      run: |
-        cat > build/go.work << EOF
-        go 1.24.0
-        
-        use ./repos/cpu
-        use ./repos/u-root
-        EOF
-    
-    - name: Install dependencies
-      run: |
-        cd build/repos/cpu
-        go mod download
-        # Build u-root from source
-        echo "Building u-root from source..."
-        cd ../u-root
-        go build -o ../../u-root-bin ./
-        cd ../cpu
-    
-    - name: Generate SSH keys
-      run: |
-        mkdir -p build/binaries
-        echo "Generating default SSH keys for CPU..."
-        ssh-keygen -t rsa -b 4096 -f build/binaries/identity -N "" -C "cpu-default-key"
-        echo "SSH keys generated:"
-        echo "  Private key: build/binaries/identity"
-        echo "  Public key: build/binaries/identity.pub"
-        ls -la build/binaries/identity*
-
-    - name: Build cpu binary for aarch64
-      run: |
-        cd build/repos/cpu
-        mkdir -p ../../binaries
-        echo "Building cpu binary..."
-        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../binaries/cpu ./cmds/cpu
-        echo "cpu binary built successfully"
-        file ../../binaries/cpu
-    
-    - name: Build cpud binary for aarch64
-      run: |
-        cd build/repos/cpu
-        echo "Building cpud binary..."
-        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../binaries/cpud ./cmds/cpud
-        echo "cpud binary built successfully"
-        file ../../binaries/cpud
-    
-    - name: Create u-root initramfs with cpud
-      run: |
-        cd build/repos/cpu
-        echo "Creating u-root initramfs with cpud as init..."
-        mkdir -p ../../initramfs
-        
-        # Build the initramfs with cpud bundled in as init and include SSH public key
-        echo "Building initramfs with u-root..."
-        GOOS=linux GOARCH=arm64 ../../u-root-bin -format=cpio -o ../../initramfs/cpud-initramfs.cpio \
-            -files "../../binaries/identity.pub:etc/identity.pub" \
-            -initcmd="cpud" \
-            ./cmds/cpud \
-            ../u-root/cmds/core/ls \
-            ../u-root/cmds/core/ip \
-            ../u-root/cmds/core/mount \
-            ../u-root/cmds/core/mkdir \
-            ../u-root/cmds/core/gosh
-        
-        echo "Compressing initramfs..."
-        gzip -9 ../../initramfs/cpud-initramfs.cpio
-        
-        echo "Initramfs created successfully:"
-        ls -la ../../initramfs/
-        file ../../initramfs/cpud-initramfs.cpio.gz
-    
-    - name: Verify binaries
-      run: |
-        echo "Verifying built binaries..."
-        ls -la build/binaries/
-        echo "CPU binary info:"
-        file build/binaries/cpu
-        echo "CPUD binary info:"
-        file build/binaries/cpud
-        echo "Binary sizes:"
-        du -h build/binaries/*
-        echo
-        echo "Initramfs info:"
-        ls -la build/initramfs/
-        echo "Initramfs size:"
-        du -h build/initramfs/*
-    
-    - name: Create build info
-      run: |
-        cd build/binaries
-        echo "U-Root CPU Binaries for aarch64" > BUILD_INFO.txt
-        echo "Built on: $(date -u)" >> BUILD_INFO.txt
-        echo "CPU version: $CPU_VERSION" >> BUILD_INFO.txt
-        echo "Target architecture: linux/arm64" >> BUILD_INFO.txt
-        echo "Go version: $(go version)" >> BUILD_INFO.txt
-        echo "" >> BUILD_INFO.txt
-        echo "Files in this archive:" >> BUILD_INFO.txt
-        echo "- cpu: CPU client binary" >> BUILD_INFO.txt
-        echo "- cpud: CPU daemon binary" >> BUILD_INFO.txt
-        echo "- identity: Default SSH private key" >> BUILD_INFO.txt
-        echo "- identity.pub: Default SSH public key" >> BUILD_INFO.txt
-        echo "- cpud-initramfs.cpio.gz: U-root initramfs with cpud as init" >> BUILD_INFO.txt
-        echo "" >> BUILD_INFO.txt
-        echo "Usage:" >> BUILD_INFO.txt
-        echo "  ./cpu -h    # Show CPU client help" >> BUILD_INFO.txt
-        echo "  ./cpud -h   # Show CPU daemon help" >> BUILD_INFO.txt
-        echo "" >> BUILD_INFO.txt
-        echo "SSH Keys:" >> BUILD_INFO.txt
-        echo "  Default SSH keys are provided for convenience" >> BUILD_INFO.txt
-        echo "  Private key: identity" >> BUILD_INFO.txt
-        echo "  Public key: identity.pub (also embedded in initramfs)" >> BUILD_INFO.txt
-        echo "  WARNING: These are default keys - generate your own for production!" >> BUILD_INFO.txt
-        echo "" >> BUILD_INFO.txt
-        echo "Initramfs usage:" >> BUILD_INFO.txt
-        echo "  Use cpud-initramfs.cpio.gz as initrd with Linux kernel" >> BUILD_INFO.txt
-        echo "  Boot parameters: init=/init" >> BUILD_INFO.txt
-        echo "  SSH public key is embedded at /etc/identity.pub" >> BUILD_INFO.txt
-        cat BUILD_INFO.txt
     
     - name: Create checksums
       run: |
@@ -205,34 +106,6 @@ jobs:
           cpu-binaries-aarch64-*.tar.gz
           cpu-binaries-aarch64-*.tar.gz.sha256
         retention-days: 90
-    
-    - name: Debug files for release
-      if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true'
-      run: |
-        echo "=== DEBUG: Files that should be in release ==="
-        echo "Working directory: $(pwd)"
-        echo "CPU_VERSION: ${{ env.CPU_VERSION }}"
-        echo "GitHub ref: ${{ github.ref }}"
-        echo "GitHub ref_name: ${{ github.ref_name }}"
-        echo "startsWith condition: ${{ startsWith(github.ref, 'refs/tags/') }}"
-        echo "create_release input: ${{ github.event.inputs.create_release }}"
-        echo
-        echo "Binaries directory:"
-        ls -la build/binaries/ || echo "build/binaries/ directory not found"
-        echo
-        echo "Initramfs directory:"
-        ls -la build/initramfs/ || echo "build/initramfs/ directory not found"
-        echo
-        echo "Tarball files:"
-        ls -la cpu-binaries-aarch64-*.tar.gz || echo "No tarball files found"
-        ls -la cpu-binaries-aarch64-*.tar.gz.sha256 || echo "No tarball checksum files found"
-        echo
-        echo "Checking specific files for release:"
-        [ -f "build/binaries/cpu" ] && echo "✓ build/binaries/cpu exists" || echo "✗ build/binaries/cpu missing"
-        [ -f "build/binaries/cpud" ] && echo "✓ build/binaries/cpud exists" || echo "✗ build/binaries/cpud missing"
-        [ -f "build/binaries/BUILD_INFO.txt" ] && echo "✓ build/binaries/BUILD_INFO.txt exists" || echo "✗ build/binaries/BUILD_INFO.txt missing"
-        [ -f "build/binaries/cpud-initramfs.cpio.gz" ] && echo "✓ build/binaries/cpud-initramfs.cpio.gz exists" || echo "✗ build/binaries/cpud-initramfs.cpio.gz missing"
-        [ -f "cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz" ] && echo "✓ tarball exists" || echo "✗ tarball missing"
     
     - name: Create release (manual or on tag)
       if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true'
@@ -280,102 +153,20 @@ jobs:
           - `cpud-initramfs.cpio.gz` - U-root initramfs with cpud as init
           - `cpud-initramfs.cpio.gz.sha256` - Initramfs checksum
           
-          The initramfs includes the SSH public key at `/etc/identity.pub` for automatic authentication.
+          The initramfs includes the SSH public key at `/etc/identity.pub` and cpud automatically uses it for authentication.
           
           ### Archive
           - `cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz` - Complete archive with all binaries
           - `cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz.sha256` - Archive checksum
           
-          ## Installation
-          
-          ### Download individual binaries:
-          ```bash
-          # Download binaries and keys
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/identity
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/identity.pub
-          
-          # Make executable
-          chmod +x cpu cpud
-          chmod 600 identity
-          chmod 644 identity.pub
-          
-          # Verify (optional)
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu.sha256
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud.sha256
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/identity.sha256
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/identity.pub.sha256
-          sha256sum -c cpu.sha256
-          sha256sum -c cpud.sha256
-          sha256sum -c identity.sha256
-          sha256sum -c identity.pub.sha256
-          ```
-          
-          ### Download complete archive:
-          ```bash
-          # Download and verify archive
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz.sha256
-          sha256sum -c cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz.sha256
-          
-          # Extract
-          tar -xzf cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz
-          chmod +x cpu cpud
-          ```
-          
-          ## Initramfs Usage
-          
-          Use the initramfs to boot a system with cpud as init:
-          
-          ```bash
-          # Download initramfs
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud-initramfs.cpio.gz
-          
-          # Verify checksum
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud-initramfs.cpio.gz.sha256
-          sha256sum -c cpud-initramfs.cpio.gz.sha256
-          
-          # Use with kernel (example with qemu)
-          qemu-system-aarch64 \
-            -kernel vmlinuz \
-            -initrd cpud-initramfs.cpio.gz \
-            -append "init=/init" \
-            -machine virt \
-            -cpu cortex-a57 \
-            -m 1024M
-          ```
-          
-          ## Raspberry Pi Usage
-          
-          Use the initramfs to boot a Raspberry Pi directly into cpud:
-          
-          ```bash
-          # Download initramfs to your Pi's boot partition
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud-initramfs.cpio.gz
-          sudo cp cpud-initramfs.cpio.gz /boot/firmware/
-          
-          # Edit config.txt (Pi 4/5) or boot/config.txt (older Pi)
-          sudo nano /boot/firmware/config.txt
-          
-          # Add these lines:
-          initramfs cpud-initramfs.cpio.gz followkernel
-          
-          # Edit cmdline.txt to set init
-          sudo nano /boot/firmware/cmdline.txt
-          # Add: init=/init
-          # Example: console=serial0,115200 console=tty1 root=PARTUUID=12345678-02 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait init=/init
-          
-          # Reboot - Pi will boot directly into cpud
-          sudo reboot
-          ```
-          
           ## Usage
-          ```bash
-          ./cpu -h    # Show CPU client help
-          ./cpud -h   # Show CPU daemon help
-          ```
+          
+          Download and use the complete archive, or individual binaries as needed.
+          Use the initramfs with Linux kernel (boot parameters: init=/init).
+          SSH public key is embedded at /etc/identity.pub for automatic authentication.
         draft: false
         prerelease: false
+        make_latest: true
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

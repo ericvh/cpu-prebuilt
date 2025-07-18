@@ -23,6 +23,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     
     steps:
     - name: Checkout repository
@@ -204,6 +207,30 @@ jobs:
           cpu-binaries-aarch64-*.tar.gz.sha256
         retention-days: 90
     
+    - name: Debug files for release
+      if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true'
+      run: |
+        echo "=== DEBUG: Files that should be in release ==="
+        echo "Working directory: $(pwd)"
+        echo "CPU_VERSION: ${{ env.CPU_VERSION }}"
+        echo
+        echo "Binaries directory:"
+        ls -la binaries/ || echo "binaries/ directory not found"
+        echo
+        echo "Initramfs directory:"
+        ls -la initramfs/ || echo "initramfs/ directory not found"
+        echo
+        echo "Tarball files:"
+        ls -la cpu-binaries-aarch64-*.tar.gz || echo "No tarball files found"
+        ls -la cpu-binaries-aarch64-*.tar.gz.sha256 || echo "No tarball checksum files found"
+        echo
+        echo "Checking specific files for release:"
+        [ -f "binaries/cpu" ] && echo "✓ binaries/cpu exists" || echo "✗ binaries/cpu missing"
+        [ -f "binaries/cpud" ] && echo "✓ binaries/cpud exists" || echo "✗ binaries/cpud missing"
+        [ -f "binaries/BUILD_INFO.txt" ] && echo "✓ binaries/BUILD_INFO.txt exists" || echo "✗ binaries/BUILD_INFO.txt missing"
+        [ -f "binaries/cpud-initramfs.cpio.gz" ] && echo "✓ binaries/cpud-initramfs.cpio.gz exists" || echo "✗ binaries/cpud-initramfs.cpio.gz missing"
+        [ -f "cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz" ] && echo "✓ tarball exists" || echo "✗ tarball missing"
+    
     - name: Create release (manual or on tag)
       if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true'
       uses: softprops/action-gh-release@v1
@@ -214,10 +241,13 @@ jobs:
           binaries/cpu
           binaries/cpud
           binaries/BUILD_INFO.txt
-          binaries/*.sha256
-          initramfs/cpud-initramfs.cpio.gz
-          initramfs/cpud-initramfs.cpio.gz.sha256
-          cpu-binaries-aarch64-*.tar.gz
+          binaries/cpu.sha256
+          binaries/cpud.sha256
+          binaries/BUILD_INFO.txt.sha256
+          binaries/cpud-initramfs.cpio.gz
+          binaries/cpud-initramfs.cpio.gz.sha256
+          cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz
+          cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz.sha256
           cpu-binaries-aarch64-*.tar.gz.sha256
         body: |
           # CPU Binaries for aarch64 (ARM64)

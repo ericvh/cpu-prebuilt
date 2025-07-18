@@ -44,6 +44,8 @@ jobs:
       run: |
         cd cpu
         go mod download
+        # Install u-root for initramfs creation
+        go install github.com/u-root/u-root@latest
     
     - name: Build cpu binary for aarch64
       run: |
@@ -62,6 +64,70 @@ jobs:
         echo "cpud binary built successfully"
         file ../binaries/cpud
     
+    - name: Create u-root initramfs with cpud
+      run: |
+        cd cpu
+        echo "Creating u-root initramfs with cpud as init..."
+        mkdir -p ../initramfs
+        
+        # Create cpud init script
+        cat > ../initramfs/cpud-init.go << 'EOF'
+        package main
+        
+        import (
+            "fmt"
+            "log"
+            "os"
+            "os/exec"
+            "syscall"
+            "time"
+        )
+        
+        func main() {
+            fmt.Println("CPU initramfs starting...")
+            
+            // Mount essential filesystems
+            if err := syscall.Mount("proc", "/proc", "proc", 0, ""); err != nil {
+                log.Printf("Failed to mount /proc: %v", err)
+            }
+            if err := syscall.Mount("sysfs", "/sys", "sysfs", 0, ""); err != nil {
+                log.Printf("Failed to mount /sys: %v", err)
+            }
+            if err := syscall.Mount("devtmpfs", "/dev", "devtmpfs", 0, ""); err != nil {
+                log.Printf("Failed to mount /dev: %v", err)
+            }
+            
+            // Wait a moment for system to stabilize
+            time.Sleep(2 * time.Second)
+            
+            fmt.Println("Starting cpud daemon...")
+            
+            // Start cpud as the main process
+            cmd := exec.Command("/bin/cpud", os.Args[1:]...)
+            cmd.Stdout = os.Stdout
+            cmd.Stderr = os.Stderr
+            cmd.Stdin = os.Stdin
+            
+            if err := cmd.Run(); err != nil {
+                log.Fatalf("cpud failed: %v", err)
+            }
+        }
+        EOF
+        
+        # Build the initramfs with cpud and our init
+        echo "Building initramfs with u-root..."
+        GOOS=linux GOARCH=arm64 u-root -format=cpio -o ../initramfs/cpud-initramfs.cpio \
+            -files "../binaries/cpud:bin/cpud" \
+            -initcmd="../initramfs/cpud-init.go" \
+            core
+        
+        echo "Compressing initramfs..."
+        gzip -9 ../initramfs/cpud-initramfs.cpio
+        
+        echo "Initramfs created successfully:"
+        ls -la ../initramfs/
+        file ../initramfs/cpud-initramfs.cpio.gz
+    
     - name: Verify binaries
       run: |
         echo "Verifying built binaries..."
@@ -72,6 +138,11 @@ jobs:
         file binaries/cpud
         echo "Binary sizes:"
         du -h binaries/*
+        echo
+        echo "Initramfs info:"
+        ls -la initramfs/
+        echo "Initramfs size:"
+        du -h initramfs/*
     
     - name: Create build info
       run: |
@@ -85,10 +156,15 @@ jobs:
         echo "Files in this archive:" >> BUILD_INFO.txt
         echo "- cpu: CPU client binary" >> BUILD_INFO.txt
         echo "- cpud: CPU daemon binary" >> BUILD_INFO.txt
+        echo "- cpud-initramfs.cpio.gz: U-root initramfs with cpud as init" >> BUILD_INFO.txt
         echo "" >> BUILD_INFO.txt
         echo "Usage:" >> BUILD_INFO.txt
         echo "  ./cpu -h    # Show CPU client help" >> BUILD_INFO.txt
         echo "  ./cpud -h   # Show CPU daemon help" >> BUILD_INFO.txt
+        echo "" >> BUILD_INFO.txt
+        echo "Initramfs usage:" >> BUILD_INFO.txt
+        echo "  Use cpud-initramfs.cpio.gz as initrd with Linux kernel" >> BUILD_INFO.txt
+        echo "  Boot parameters: init=/init" >> BUILD_INFO.txt
         cat BUILD_INFO.txt
     
     - name: Create checksums
@@ -98,12 +174,19 @@ jobs:
         sha256sum cpu > cpu.sha256
         sha256sum cpud > cpud.sha256
         sha256sum BUILD_INFO.txt > BUILD_INFO.txt.sha256
+        cd ../initramfs
+        sha256sum cpud-initramfs.cpio.gz > cpud-initramfs.cpio.gz.sha256
+        cd ../binaries
         echo "Checksums created:"
         cat *.sha256
+        echo "Initramfs checksum:"
+        cat ../initramfs/*.sha256
     
     - name: Create tarball
       run: |
         cd binaries
+        cp ../initramfs/cpud-initramfs.cpio.gz .
+        cp ../initramfs/cpud-initramfs.cpio.gz.sha256 .
         tar -czf ../cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz *
         cd ..
         echo "Tarball created:"
@@ -116,6 +199,7 @@ jobs:
         name: cpu-binaries-aarch64-${{ env.CPU_VERSION }}
         path: |
           binaries/
+          initramfs/
           cpu-binaries-aarch64-*.tar.gz
           cpu-binaries-aarch64-*.tar.gz.sha256
         retention-days: 90
@@ -131,6 +215,8 @@ jobs:
           binaries/cpud
           binaries/BUILD_INFO.txt
           binaries/*.sha256
+          initramfs/cpud-initramfs.cpio.gz
+          initramfs/cpud-initramfs.cpio.gz.sha256
           cpu-binaries-aarch64-*.tar.gz
           cpu-binaries-aarch64-*.tar.gz.sha256
         body: |
@@ -145,6 +231,10 @@ jobs:
           - `cpud` - CPU daemon binary for aarch64
           - `BUILD_INFO.txt` - Build information and usage notes
           - `*.sha256` - SHA256 checksums for verification
+          
+          ### Initramfs
+          - `cpud-initramfs.cpio.gz` - U-root initramfs with cpud as init
+          - `cpud-initramfs.cpio.gz.sha256` - Initramfs checksum
           
           ### Archive
           - `cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz` - Complete archive with all binaries
@@ -178,6 +268,52 @@ jobs:
           # Extract
           tar -xzf cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz
           chmod +x cpu cpud
+          ```
+          
+          ## Initramfs Usage
+          
+          Use the initramfs to boot a system with cpud as init:
+          
+          ```bash
+          # Download initramfs
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud-initramfs.cpio.gz
+          
+          # Verify checksum
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud-initramfs.cpio.gz.sha256
+          sha256sum -c cpud-initramfs.cpio.gz.sha256
+          
+          # Use with kernel (example with qemu)
+          qemu-system-aarch64 \
+            -kernel vmlinuz \
+            -initrd cpud-initramfs.cpio.gz \
+            -append "init=/init" \
+            -machine virt \
+            -cpu cortex-a57 \
+            -m 1024M
+          ```
+          
+          ## Raspberry Pi Usage
+          
+          Use the initramfs to boot a Raspberry Pi directly into cpud:
+          
+          ```bash
+          # Download initramfs to your Pi's boot partition
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud-initramfs.cpio.gz
+          sudo cp cpud-initramfs.cpio.gz /boot/firmware/
+          
+          # Edit config.txt (Pi 4/5) or boot/config.txt (older Pi)
+          sudo nano /boot/firmware/config.txt
+          
+          # Add these lines:
+          initramfs cpud-initramfs.cpio.gz followkernel
+          
+          # Edit cmdline.txt to set init
+          sudo nano /boot/firmware/cmdline.txt
+          # Add: init=/init
+          # Example: console=serial0,115200 console=tty1 root=PARTUUID=12345678-02 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait init=/init
+          
+          # Reboot - Pi will boot directly into cpud
+          sudo reboot
           ```
           
           ## Usage

@@ -28,6 +28,13 @@ curl -fsSL https://raw.githubusercontent.com/ericvh/cpu-prebuilt/main/install.sh
 - **Multi-architecture**: Supports linux/arm64
 - **Scratch-based**: Minimal container size
 
+### 🌟 **U-root Initramfs** (New!)
+- **Boot to cpud**: Minimal Linux system that boots directly into cpud
+- **Tiny footprint**: ~10-20MB compressed initramfs
+- **No OS required**: Perfect for dedicated CPU servers
+- **Quick boot**: 2-5 seconds to cpud ready
+- **Raspberry Pi ready**: Simple Pi configuration included
+
 ### 🛠️ **GitHub Actions Artifacts**
 - **Development builds**: Available for every commit
 - **90-day retention**: Temporary artifacts for testing
@@ -89,11 +96,34 @@ docker cp cpu-container:/usr/local/bin/cpud ./cpud
 docker rm cpu-container
 ```
 
+### Option 5: Initramfs Boot (Minimal System)
+```bash
+# Download initramfs
+wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpud-initramfs.cpio.gz
+
+# Verify checksum
+wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpud-initramfs.cpio.gz.sha256
+sha256sum -c cpud-initramfs.cpio.gz.sha256
+
+# Use with kernel (QEMU example)
+qemu-system-aarch64 \
+  -kernel vmlinuz-aarch64 \
+  -initrd cpud-initramfs.cpio.gz \
+  -append "init=/init console=ttyAMA0" \
+  -machine virt -cpu cortex-a57 -m 1024M -nographic \
+  -netdev user,id=net0 -device virtio-net-device,netdev=net0
+
+# Physical hardware: copy to /boot and update bootloader
+sudo cp cpud-initramfs.cpio.gz /boot/
+# Update GRUB/U-Boot configuration
+```
+
 ## What this does
 
 This repository uses GitHub Actions to:
 - Build `cpu` and `cpud` from the [u-root/cpu](https://github.com/u-root/cpu) project
 - Cross-compile for aarch64 (ARM64) architecture
+- Create u-root initramfs that boots directly into cpud
 - Package the binaries as downloadable artifacts
 - Create GitHub releases with checksums
 - Publish container images to GitHub Packages
@@ -105,7 +135,10 @@ This repository uses GitHub Actions to:
 2. **Auto-install**: Use the install script (recommended)
 3. **Manual download**: Download individual binaries or archives
 4. **Container usage**: Pull from GitHub Packages
-5. **Development builds**: Download from [Actions](../../actions) artifacts
+5. **Initramfs boot**: Boot minimal system directly into cpud
+6. **Development builds**: Download from [Actions](../../actions) artifacts
+
+For detailed initramfs usage, see [INITRAMFS.md](docs/INITRAMFS.md).
 
 ## Creating Releases
 
@@ -123,6 +156,39 @@ This repository uses GitHub Actions to:
 
 - **cpu**: The CPU client binary for connecting to remote systems
 - **cpud**: The CPU daemon binary for hosting remote connections
+- **cpud-initramfs.cpio.gz**: U-root initramfs that boots directly into cpud
+
+## Quick Start Options
+
+### 1. **Install Binaries** (Traditional)
+```bash
+curl -fsSL https://raw.githubusercontent.com/ericvh/cpu-prebuilt/main/install.sh | bash
+```
+
+### 2. **Boot Initramfs** (Minimal System)
+```bash
+# Download initramfs
+wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpud-initramfs.cpio.gz
+
+# Boot with QEMU (example)
+qemu-system-aarch64 \
+  -kernel vmlinuz-aarch64 \
+  -initrd cpud-initramfs.cpio.gz \
+  -append "init=/init console=ttyAMA0" \
+  -machine virt -cpu cortex-a57 -m 1024M -nographic
+
+# Or boot on Raspberry Pi
+sudo cp cpud-initramfs.cpio.gz /boot/firmware/
+echo "initramfs cpud-initramfs.cpio.gz followkernel" | sudo tee -a /boot/firmware/config.txt
+sudo sed -i 's/$/ init=\/init/' /boot/firmware/cmdline.txt
+sudo reboot
+```
+
+### 3. **Container Usage**
+```bash
+docker pull ghcr.io/ericvh/cpu-prebuilt:latest
+docker run --rm ghcr.io/ericvh/cpu-prebuilt:latest /usr/local/bin/cpud -h
+```
 
 ## Architecture
 

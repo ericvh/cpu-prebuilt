@@ -58,10 +58,11 @@ jobs:
 
     - name: Generate SSH keys
       run: |
+        mkdir -p binaries
         echo "Generating default SSH keys for CPU..."
-        ssh-keygen -t rsa -b 4096 -f binaries/cpu_rsa -N "" -C "cpu-default-key"
+        ssh-keygen -t rsa -b 4096 -f binaries/identity -N "" -C "cpu-default-key"
         echo "SSH keys generated:"
-        ls -la binaries/cpu_rsa*
+        ls -la binaries/identity*
     
     - name: Build binaries
       run: |
@@ -77,8 +78,8 @@ jobs:
         FROM scratch
         COPY binaries/cpu /usr/local/bin/cpu
         COPY binaries/cpud /usr/local/bin/cpud
-        COPY binaries/cpu_rsa /etc/cpu_rsa
-        COPY binaries/cpu_rsa.pub /etc/cpu_rsa.pub
+        COPY binaries/identity /etc/identity
+        COPY binaries/identity.pub /etc/identity.pub
         COPY BUILD_INFO.txt /BUILD_INFO.txt
         LABEL org.opencontainers.image.title="CPU Binaries"
         LABEL org.opencontainers.image.description="Prebuilt CPU binaries for aarch64 with SSH keys"
@@ -100,8 +101,8 @@ jobs:
         Files in this package:
         - /usr/local/bin/cpu: CPU client binary
         - /usr/local/bin/cpud: CPU daemon binary
-        - /etc/cpu_rsa: Default SSH private key
-        - /etc/cpu_rsa.pub: Default SSH public key
+        - /etc/identity: Default SSH private key
+        - /etc/identity.pub: Default SSH public key
         
         WARNING: These are default keys for convenience - generate your own for production!
         
@@ -110,8 +111,8 @@ jobs:
           docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest /usr/local/bin/cpud -h
         
         Extract SSH keys from container:
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest cat /etc/cpu_rsa > cpu_rsa
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest cat /etc/cpu_rsa.pub > cpu_rsa.pub
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest cat /etc/identity > identity
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest cat /etc/identity.pub > identity.pub
         EOF
     
     - name: Build and push Docker image

@@ -55,6 +55,13 @@ jobs:
         git clone https://github.com/u-root/cpu.git
         cd cpu
         echo "CPU_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
+
+    - name: Generate SSH keys
+      run: |
+        echo "Generating default SSH keys for CPU..."
+        ssh-keygen -t rsa -b 4096 -f binaries/cpu_rsa -N "" -C "cpu-default-key"
+        echo "SSH keys generated:"
+        ls -la binaries/cpu_rsa*
     
     - name: Build binaries
       run: |
@@ -70,9 +77,11 @@ jobs:
         FROM scratch
         COPY binaries/cpu /usr/local/bin/cpu
         COPY binaries/cpud /usr/local/bin/cpud
+        COPY binaries/cpu_rsa /etc/cpu_rsa
+        COPY binaries/cpu_rsa.pub /etc/cpu_rsa.pub
         COPY BUILD_INFO.txt /BUILD_INFO.txt
         LABEL org.opencontainers.image.title="CPU Binaries"
-        LABEL org.opencontainers.image.description="Prebuilt CPU binaries for aarch64"
+        LABEL org.opencontainers.image.description="Prebuilt CPU binaries for aarch64 with SSH keys"
         LABEL org.opencontainers.image.source="https://github.com/${{ github.repository }}"
         LABEL org.opencontainers.image.version="${{ env.CPU_VERSION }}"
         LABEL org.opencontainers.image.licenses="BSD-3-Clause"
@@ -91,10 +100,18 @@ jobs:
         Files in this package:
         - /usr/local/bin/cpu: CPU client binary
         - /usr/local/bin/cpud: CPU daemon binary
+        - /etc/cpu_rsa: Default SSH private key
+        - /etc/cpu_rsa.pub: Default SSH public key
+        
+        WARNING: These are default keys for convenience - generate your own for production!
         
         Usage:
           docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest /usr/local/bin/cpu -h
           docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest /usr/local/bin/cpud -h
+        
+        Extract SSH keys from container:
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest cat /etc/cpu_rsa > cpu_rsa
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest cat /etc/cpu_rsa.pub > cpu_rsa.pub
         EOF
     
     - name: Build and push Docker image

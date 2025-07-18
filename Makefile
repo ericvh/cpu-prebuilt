@@ -26,6 +26,8 @@ CPU_BINARY := $(BINARIES_DIR)/cpu
 CPUD_BINARY := $(BINARIES_DIR)/cpud
 INITRAMFS_FILE := $(INITRAMFS_DIR)/cpud-initramfs.cpio.gz
 BUILD_INFO := $(BINARIES_DIR)/BUILD_INFO.txt
+SSH_PRIVATE_KEY := $(BINARIES_DIR)/cpu_rsa
+SSH_PUBLIC_KEY := $(BINARIES_DIR)/cpu_rsa.pub
 
 # Version detection
 CPU_VERSION := $(shell cd $(CPU_REPO) 2>/dev/null && git describe --tags --always 2>/dev/null || echo "unknown")
@@ -66,6 +68,18 @@ $(GO_WORK): $(CPU_REPO) $(UROOT_REPO)
 	@echo "use ./repos/cpu" >> $(GO_WORK)
 	@echo "use ./repos/u-root" >> $(GO_WORK)
 
+$(SSH_PRIVATE_KEY): | $(BUILD_DIR)
+	@echo "Generating default SSH keys for CPU..."
+	@mkdir -p $(BINARIES_DIR)
+	@if [ ! -f "$(SSH_PRIVATE_KEY)" ]; then \
+		ssh-keygen -t rsa -b 4096 -f $(SSH_PRIVATE_KEY) -N "" -C "cpu-default-key"; \
+		echo "SSH keys generated:"; \
+		echo "  Private key: $(SSH_PRIVATE_KEY)"; \
+		echo "  Public key: $(SSH_PUBLIC_KEY)"; \
+	else \
+		echo "SSH keys already exist, skipping generation"; \
+	fi
+
 # Repository management
 repos: $(CPU_REPO) $(UROOT_REPO)  ## Clone all repositories
 
@@ -89,7 +103,7 @@ $(CPUD_BINARY): $(GO_WORK) $(UROOT_BIN)
 	@echo "Building cpud binary for aarch64..."
 	@cd $(CPU_REPO) && GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) go build -o ../../binaries/cpud ./cmds/cpud
 
-$(BUILD_INFO): $(CPU_BINARY) $(CPUD_BINARY)
+$(BUILD_INFO): $(CPU_BINARY) $(CPUD_BINARY) $(SSH_PRIVATE_KEY)
 	@echo "Creating build info..."
 	@cd $(CPU_REPO) && CPU_VERSION=$$(git describe --tags --always) && \
 	echo "U-Root CPU Binaries for aarch64 (Local Build)" > ../../binaries/BUILD_INFO.txt && \
@@ -101,19 +115,28 @@ $(BUILD_INFO): $(CPU_BINARY) $(CPUD_BINARY)
 	echo "Files in this archive:" >> ../../binaries/BUILD_INFO.txt && \
 	echo "- cpu: CPU client binary" >> ../../binaries/BUILD_INFO.txt && \
 	echo "- cpud: CPU daemon binary" >> ../../binaries/BUILD_INFO.txt && \
+	echo "- cpu_rsa: Default SSH private key" >> ../../binaries/BUILD_INFO.txt && \
+	echo "- cpu_rsa.pub: Default SSH public key" >> ../../binaries/BUILD_INFO.txt && \
 	echo "- cpud-initramfs.cpio.gz: U-root initramfs with cpud as init" >> ../../binaries/BUILD_INFO.txt && \
 	echo "" >> ../../binaries/BUILD_INFO.txt && \
 	echo "Usage:" >> ../../binaries/BUILD_INFO.txt && \
 	echo "  ./cpu -h    # Show CPU client help" >> ../../binaries/BUILD_INFO.txt && \
 	echo "  ./cpud -h   # Show CPU daemon help" >> ../../binaries/BUILD_INFO.txt && \
 	echo "" >> ../../binaries/BUILD_INFO.txt && \
+	echo "SSH Keys:" >> ../../binaries/BUILD_INFO.txt && \
+	echo "  Default SSH keys are provided for convenience" >> ../../binaries/BUILD_INFO.txt && \
+	echo "  Private key: cpu_rsa" >> ../../binaries/BUILD_INFO.txt && \
+	echo "  Public key: cpu_rsa.pub (also embedded in initramfs)" >> ../../binaries/BUILD_INFO.txt && \
+	echo "  WARNING: These are default keys - generate your own for production!" >> ../../binaries/BUILD_INFO.txt && \
+	echo "" >> ../../binaries/BUILD_INFO.txt && \
 	echo "Initramfs usage:" >> ../../binaries/BUILD_INFO.txt && \
 	echo "  Use cpud-initramfs.cpio.gz as initrd with Linux kernel" >> ../../binaries/BUILD_INFO.txt && \
 	echo "  Boot parameters: init=/init" >> ../../binaries/BUILD_INFO.txt && \
+	echo "  SSH public key is embedded at /etc/cpu_rsa.pub" >> ../../binaries/BUILD_INFO.txt && \
 	echo "" >> ../../binaries/BUILD_INFO.txt && \
 	echo "Build system: Makefile" >> ../../binaries/BUILD_INFO.txt
 
-binaries: check-go $(CPU_BINARY) $(CPUD_BINARY) $(BUILD_INFO) ## Build cpu and cpud binaries
+binaries: check-go $(CPU_BINARY) $(CPUD_BINARY) $(BUILD_INFO) $(SSH_PRIVATE_KEY) ## Build cpu and cpud binaries
 	@echo "Verifying built binaries..."
 	@ls -la $(BINARIES_DIR)/
 	@echo ""
@@ -122,14 +145,19 @@ binaries: check-go $(CPU_BINARY) $(CPUD_BINARY) $(BUILD_INFO) ## Build cpu and c
 	@echo "CPUD binary info:"
 	@file $(CPUD_BINARY)
 	@echo ""
+	@echo "SSH key info:"
+	@echo "Private key: $(SSH_PRIVATE_KEY)"
+	@echo "Public key: $(SSH_PUBLIC_KEY)"
+	@echo ""
 	@echo "Binary sizes:"
 	@du -h $(BINARIES_DIR)/*
 
-$(INITRAMFS_FILE): $(CPUD_BINARY) $(UROOT_BIN)
+$(INITRAMFS_FILE): $(CPUD_BINARY) $(UROOT_BIN) $(SSH_PUBLIC_KEY)
 	@echo "Creating u-root initramfs with cpud as init..."
 	@rm -f $(INITRAMFS_DIR)/*
 	@echo "Building initramfs with u-root..."
 	@cd $(CPU_REPO) && GOOS=$(GOOS) GOARCH=$(GOARCH) ../../u-root-bin -format=cpio -o ../../initramfs/cpud-initramfs.cpio \
+		-files "../../binaries/cpu_rsa.pub:etc/cpu_rsa.pub" \
 		-initcmd="cpud" \
 		./cmds/cpud \
 		../u-root/cmds/core/ls \

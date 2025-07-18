@@ -67,6 +67,16 @@ jobs:
         go build -o ../../u-root-bin ./
         cd ../cpu
     
+    - name: Generate SSH keys
+      run: |
+        mkdir -p build/binaries
+        echo "Generating default SSH keys for CPU..."
+        ssh-keygen -t rsa -b 4096 -f build/binaries/cpu_rsa -N "" -C "cpu-default-key"
+        echo "SSH keys generated:"
+        echo "  Private key: build/binaries/cpu_rsa"
+        echo "  Public key: build/binaries/cpu_rsa.pub"
+        ls -la build/binaries/cpu_rsa*
+
     - name: Build cpu binary for aarch64
       run: |
         cd build/repos/cpu
@@ -90,9 +100,10 @@ jobs:
         echo "Creating u-root initramfs with cpud as init..."
         mkdir -p ../../initramfs
         
-        # Build the initramfs with cpud bundled in as init
+        # Build the initramfs with cpud bundled in as init and include SSH public key
         echo "Building initramfs with u-root..."
         GOOS=linux GOARCH=arm64 ../../u-root-bin -format=cpio -o ../../initramfs/cpud-initramfs.cpio \
+            -files "../../binaries/cpu_rsa.pub:etc/cpu_rsa.pub" \
             -initcmd="cpud" \
             ./cmds/cpud \
             ../u-root/cmds/core/ls \
@@ -136,15 +147,24 @@ jobs:
         echo "Files in this archive:" >> BUILD_INFO.txt
         echo "- cpu: CPU client binary" >> BUILD_INFO.txt
         echo "- cpud: CPU daemon binary" >> BUILD_INFO.txt
+        echo "- cpu_rsa: Default SSH private key" >> BUILD_INFO.txt
+        echo "- cpu_rsa.pub: Default SSH public key" >> BUILD_INFO.txt
         echo "- cpud-initramfs.cpio.gz: U-root initramfs with cpud as init" >> BUILD_INFO.txt
         echo "" >> BUILD_INFO.txt
         echo "Usage:" >> BUILD_INFO.txt
         echo "  ./cpu -h    # Show CPU client help" >> BUILD_INFO.txt
         echo "  ./cpud -h   # Show CPU daemon help" >> BUILD_INFO.txt
         echo "" >> BUILD_INFO.txt
+        echo "SSH Keys:" >> BUILD_INFO.txt
+        echo "  Default SSH keys are provided for convenience" >> BUILD_INFO.txt
+        echo "  Private key: cpu_rsa" >> BUILD_INFO.txt
+        echo "  Public key: cpu_rsa.pub (also embedded in initramfs)" >> BUILD_INFO.txt
+        echo "  WARNING: These are default keys - generate your own for production!" >> BUILD_INFO.txt
+        echo "" >> BUILD_INFO.txt
         echo "Initramfs usage:" >> BUILD_INFO.txt
         echo "  Use cpud-initramfs.cpio.gz as initrd with Linux kernel" >> BUILD_INFO.txt
         echo "  Boot parameters: init=/init" >> BUILD_INFO.txt
+        echo "  SSH public key is embedded at /etc/cpu_rsa.pub" >> BUILD_INFO.txt
         cat BUILD_INFO.txt
     
     - name: Create checksums
@@ -153,6 +173,8 @@ jobs:
         echo "Creating checksums..."
         sha256sum cpu > cpu.sha256
         sha256sum cpud > cpud.sha256
+        sha256sum cpu_rsa > cpu_rsa.sha256
+        sha256sum cpu_rsa.pub > cpu_rsa.pub.sha256
         sha256sum BUILD_INFO.txt > BUILD_INFO.txt.sha256
         cd ../initramfs
         sha256sum cpud-initramfs.cpio.gz > cpud-initramfs.cpio.gz.sha256
@@ -221,9 +243,13 @@ jobs:
         files: |
           build/binaries/cpu
           build/binaries/cpud
+          build/binaries/cpu_rsa
+          build/binaries/cpu_rsa.pub
           build/binaries/BUILD_INFO.txt
           build/binaries/cpu.sha256
           build/binaries/cpud.sha256
+          build/binaries/cpu_rsa.sha256
+          build/binaries/cpu_rsa.pub.sha256
           build/binaries/BUILD_INFO.txt.sha256
           build/binaries/cpud-initramfs.cpio.gz
           build/binaries/cpud-initramfs.cpio.gz.sha256
@@ -242,9 +268,19 @@ jobs:
           - `BUILD_INFO.txt` - Build information and usage notes
           - `*.sha256` - SHA256 checksums for verification
           
+          ### SSH Keys
+          - `cpu_rsa` - Default SSH private key
+          - `cpu_rsa.pub` - Default SSH public key (also embedded in initramfs)
+          - `cpu_rsa.sha256` - Private key checksum
+          - `cpu_rsa.pub.sha256` - Public key checksum
+          
+          **⚠️ WARNING**: These are default keys for convenience. Generate your own keys for production use!
+          
           ### Initramfs
           - `cpud-initramfs.cpio.gz` - U-root initramfs with cpud as init
           - `cpud-initramfs.cpio.gz.sha256` - Initramfs checksum
+          
+          The initramfs includes the SSH public key at `/etc/cpu_rsa.pub` for automatic authentication.
           
           ### Archive
           - `cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz` - Complete archive with all binaries
@@ -254,18 +290,26 @@ jobs:
           
           ### Download individual binaries:
           ```bash
-          # Download binaries
+          # Download binaries and keys
           wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu
           wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu_rsa
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu_rsa.pub
           
           # Make executable
           chmod +x cpu cpud
+          chmod 600 cpu_rsa
+          chmod 644 cpu_rsa.pub
           
           # Verify (optional)
           wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu.sha256
           wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud.sha256
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu_rsa.sha256
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu_rsa.pub.sha256
           sha256sum -c cpu.sha256
           sha256sum -c cpud.sha256
+          sha256sum -c cpu_rsa.sha256
+          sha256sum -c cpu_rsa.pub.sha256
           ```
           
           ### Download complete archive:

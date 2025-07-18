@@ -7,61 +7,37 @@ This guide explains how to use the CPU initramfs that boots directly into the cp
 The CPU initramfs is a u-root-based initial RAM filesystem that:
 - Boots directly into the cpud daemon
 - Provides a minimal Linux environment
-- Automatically mounts essential filesystems (`/proc`, `/sys`### Troubleshooting
-
-### Common Issues
-
-1. **Boot Hangs**: Check console output, ensure correct kernel
-2. **Network Issues**: Verify network configuration and drivers
-3. **Permission Issues**: Ensure proper filesystem permissions
-4. **Pi won't boot**: Check config.txt and cmdline.txt syntax
-
-### Raspberry Pi Specific Issues
-
-#### **Pi doesn't boot with initramfs**
-```bash
-# Check config.txt syntax
-sudo nano /boot/firmware/config.txt
-
-# Ensure correct path and format
-initramfs cpud-initramfs.cpio.gz followkernel
-
-# Verify file exists and permissions
-ls -la /boot/firmware/cpud-initramfs.cpio.gz
-```
-
-#### **No network on Pi**
-```bash
-# Check if interface is up
-ip link show
-
-# Bring up ethernet
-ip link set eth0 up
-dhclient eth0
-
-# Check cable connection
-ethtool eth0
-```
-
-#### **No console output**
-```bash
-# In cmdline.txt, ensure console is set
-console=serial0,115200 console=tty1
-
-# Enable UART in config.txt
-enable_uart=1
-```
-
-#### **Pi 4/5 specific issues**
-```bash
-# Ensure 64-bit mode is enabled
-arm_64bit=1
-
-# Check if using correct boot partition
-ls -la /boot/firmware/  # Pi 4/5
-ls -la /boot/           # Pi 3 and earlier
-````)
+- Automatically mounts essential filesystems (`/proc`, `/sys`, `/dev`)
+- Includes a default SSH public key for authentication (`/etc/cpu_rsa.pub`)
 - Starts cpud as the init process
+
+## SSH Key Authentication
+
+The initramfs includes a default SSH public key at `/etc/cpu_rsa.pub` for convenient authentication. The corresponding private key is available in the release binaries.
+
+**⚠️ WARNING**: These are default keys for convenience. Generate your own keys for production use!
+
+### Using the Default Keys
+
+```bash
+# Download the private key from the release
+wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpu_rsa
+chmod 600 cpu_rsa
+
+# Use with CPU client
+./cpu -key cpu_rsa user@target-system
+```
+
+### Generating Your Own Keys
+
+```bash
+# Generate your own key pair
+ssh-keygen -t rsa -b 4096 -f my_cpu_key -N ""
+
+# Replace the public key in the initramfs (requires rebuilding)
+# Or use cpu with your custom key
+./cpu -key my_cpu_key user@target-system
+```
 
 ## Use Cases
 

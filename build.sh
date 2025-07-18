@@ -32,6 +32,25 @@ else
     git clone https://github.com/u-root/cpu.git
 fi
 
+echo "Cloning u-root/u-root repository..."
+if [ -d "u-root" ]; then
+    echo "u-root directory already exists, updating..."
+    cd u-root
+    git pull
+    cd ..
+else
+    git clone https://github.com/u-root/u-root.git
+fi
+
+# Set up Go workspace
+echo "Setting up Go workspace..."
+cat > go.work << EOF
+go 1.24.0
+
+use ./cpu
+use ./u-root
+EOF
+
 cd cpu
 
 # Get version info
@@ -42,9 +61,11 @@ echo "Building u-root/cpu version: $CPU_VERSION"
 echo "Downloading Go dependencies..."
 go mod download
 
-# Install u-root for initramfs creation
-echo "Installing u-root..."
-go install github.com/u-root/u-root@latest
+# Build u-root from source
+echo "Building u-root from source..."
+cd ../u-root
+go build -o ../u-root-bin ./
+cd ../cpu
 
 # Build cpu binary
 echo "Building cpu binary for aarch64..."
@@ -58,56 +79,16 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpud ./cmds/cpud
 echo "Creating u-root initramfs with cpud as init..."
 mkdir -p ../initramfs
 
-# Create cpud init script
-cat > ../initramfs/cpud-init.go << 'EOF'
-package main
-
-import (
-    "fmt"
-    "log"
-    "os"
-    "os/exec"
-    "syscall"
-    "time"
-)
-
-func main() {
-    fmt.Println("CPU initramfs starting...")
-    
-    // Mount essential filesystems
-    if err := syscall.Mount("proc", "/proc", "proc", 0, ""); err != nil {
-        log.Printf("Failed to mount /proc: %v", err)
-    }
-    if err := syscall.Mount("sysfs", "/sys", "sysfs", 0, ""); err != nil {
-        log.Printf("Failed to mount /sys: %v", err)
-    }
-    if err := syscall.Mount("devtmpfs", "/dev", "devtmpfs", 0, ""); err != nil {
-        log.Printf("Failed to mount /dev: %v", err)
-    }
-    
-    // Wait a moment for system to stabilize
-    time.Sleep(2 * time.Second)
-    
-    fmt.Println("Starting cpud daemon...")
-    
-    // Start cpud as the main process
-    cmd := exec.Command("/bin/cpud", os.Args[1:]...)
-    cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
-    cmd.Stdin = os.Stdin
-    
-    if err := cmd.Run(); err != nil {
-        log.Fatalf("cpud failed: %v", err)
-    }
-}
-EOF
-
-# Build the initramfs with cpud and our init
+# Build the initramfs with cpud bundled in as init
 echo "Building initramfs with u-root..."
-GOOS=linux GOARCH=arm64 u-root -format=cpio -o ../initramfs/cpud-initramfs.cpio \
-    -files "../binaries/cpud:bin/cpud" \
-    -initcmd="../initramfs/cpud-init.go" \
-    core
+GOOS=linux GOARCH=arm64 ../u-root-bin -format=cpio -o ../initramfs/cpud-initramfs.cpio \
+    -initcmd="cpud" \
+    ./cmds/cpud \
+    ../u-root/cmds/core/ls \
+    ../u-root/cmds/core/ip \
+    ../u-root/cmds/core/mount \
+    ../u-root/cmds/core/mkdir \
+    ../u-root/cmds/core/gosh
 
 echo "Compressing initramfs..."
 gzip -9 ../initramfs/cpud-initramfs.cpio

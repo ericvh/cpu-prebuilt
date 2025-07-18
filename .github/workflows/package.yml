@@ -47,6 +47,14 @@ jobs:
     
     - name: Set up Go
       uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+    
+    - name: Build everything using Makefile
+      run: |
+        echo "Building CPU binaries and initramfs using Makefile..."
+        make all
+        echo "Build completed successfully!"
     
     - name: Get CPU version for metadata
       run: |

@@ -6,6 +6,16 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a release after building'
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: false
+        type: string
   schedule:
     # Run weekly on Sundays at 00:00 UTC to check for new cpu releases
     - cron: '0 0 * * 0'
@@ -81,39 +91,101 @@ jobs:
         echo "  ./cpud -h   # Show CPU daemon help" >> BUILD_INFO.txt
         cat BUILD_INFO.txt
     
+    - name: Create checksums
+      run: |
+        cd binaries
+        echo "Creating checksums..."
+        sha256sum cpu > cpu.sha256
+        sha256sum cpud > cpud.sha256
+        sha256sum BUILD_INFO.txt > BUILD_INFO.txt.sha256
+        echo "Checksums created:"
+        cat *.sha256
+    
+    - name: Create tarball
+      run: |
+        cd binaries
+        tar -czf ../cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz *
+        cd ..
+        echo "Tarball created:"
+        ls -la cpu-binaries-aarch64-*.tar.gz
+        sha256sum cpu-binaries-aarch64-*.tar.gz > cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz.sha256
+    
     - name: Upload binaries as artifact
       uses: actions/upload-artifact@v4
       with:
-        name: cpu-binaries-aarch64
-        path: binaries/
+        name: cpu-binaries-aarch64-${{ env.CPU_VERSION }}
+        path: |
+          binaries/
+          cpu-binaries-aarch64-*.tar.gz
+          cpu-binaries-aarch64-*.tar.gz.sha256
         retention-days: 90
     
-    - name: Create release (on tag)
-      if: startsWith(github.ref, 'refs/tags/')
+    - name: Create release (manual or on tag)
+      if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true'
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+        name: CPU Binaries ${{ github.event.inputs.release_tag || github.ref_name }}
         files: |
           binaries/cpu
           binaries/cpud
           binaries/BUILD_INFO.txt
+          binaries/*.sha256
+          cpu-binaries-aarch64-*.tar.gz
+          cpu-binaries-aarch64-*.tar.gz.sha256
         body: |
-          Prebuilt CPU binaries for aarch64 (ARM64)
+          # CPU Binaries for aarch64 (ARM64)
           
-          Built from u-root/cpu version: ${{ env.CPU_VERSION }}
+          Built from [u-root/cpu](https://github.com/u-root/cpu) version: `${{ env.CPU_VERSION }}`
           
-          **Files:**
+          ## Files
+          
+          ### Individual Binaries
           - `cpu` - CPU client binary for aarch64
           - `cpud` - CPU daemon binary for aarch64
           - `BUILD_INFO.txt` - Build information and usage notes
+          - `*.sha256` - SHA256 checksums for verification
           
-          **Usage:**
+          ### Archive
+          - `cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz` - Complete archive with all binaries
+          - `cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz.sha256` - Archive checksum
+          
+          ## Installation
+          
+          ### Download individual binaries:
           ```bash
-          # Make binaries executable
+          # Download binaries
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud
+          
+          # Make executable
           chmod +x cpu cpud
           
-          # Show help
-          ./cpu -h
-          ./cpud -h
+          # Verify (optional)
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu.sha256
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpud.sha256
+          sha256sum -c cpu.sha256
+          sha256sum -c cpud.sha256
           ```
+          
+          ### Download complete archive:
+          ```bash
+          # Download and verify archive
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag || github.ref_name }}/cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz.sha256
+          sha256sum -c cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz.sha256
+          
+          # Extract
+          tar -xzf cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz
+          chmod +x cpu cpud
+          ```
+          
+          ## Usage
+          ```bash
+          ./cpu -h    # Show CPU client help
+          ./cpud -h   # Show CPU daemon help
+          ```
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

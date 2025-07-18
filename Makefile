@@ -148,7 +148,7 @@ initramfs: $(INITRAMFS_FILE) ## Build initramfs with cpud as init
 	@echo "Initramfs size:"
 	@du -h $(INITRAMFS_DIR)/*
 
-build: all ## Alias for 'all' target
+compile: binaries initramfs ## Build everything (alternative to 'all')
 
 install: $(CPU_BINARY) $(CPUD_BINARY) ## Install binaries to /usr/local/bin
 	@echo "Installing CPU binaries to /usr/local/bin..."

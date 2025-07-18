@@ -38,60 +38,61 @@ jobs:
     
     - name: Clone u-root/cpu repository
       run: |
-        git clone https://github.com/u-root/cpu.git
-        cd cpu
+        mkdir -p build/repos
+        git clone https://github.com/u-root/cpu.git build/repos/cpu
+        cd build/repos/cpu
         echo "CPU_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
         echo "Building u-root/cpu version: $(git describe --tags --always)"
     
     - name: Clone u-root/u-root repository
       run: |
-        git clone https://github.com/u-root/u-root.git
+        git clone https://github.com/u-root/u-root.git build/repos/u-root
     
     - name: Set up Go workspace
       run: |
-        cat > go.work << EOF
+        cat > build/go.work << EOF
         go 1.24.0
         
-        use ./cpu
-        use ./u-root
+        use ./repos/cpu
+        use ./repos/u-root
         EOF
     
     - name: Install dependencies
       run: |
-        cd cpu
+        cd build/repos/cpu
         go mod download
         # Build u-root from source
         echo "Building u-root from source..."
         cd ../u-root
-        go build -o ../u-root-bin ./
+        go build -o ../../u-root-bin ./
         cd ../cpu
     
     - name: Build cpu binary for aarch64
       run: |
-        cd cpu
-        mkdir -p ../binaries
+        cd build/repos/cpu
+        mkdir -p ../../binaries
         echo "Building cpu binary..."
-        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpu ./cmds/cpu
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../binaries/cpu ./cmds/cpu
         echo "cpu binary built successfully"
-        file ../binaries/cpu
+        file ../../binaries/cpu
     
     - name: Build cpud binary for aarch64
       run: |
-        cd cpu
+        cd build/repos/cpu
         echo "Building cpud binary..."
-        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpud ./cmds/cpud
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../binaries/cpud ./cmds/cpud
         echo "cpud binary built successfully"
-        file ../binaries/cpud
+        file ../../binaries/cpud
     
     - name: Create u-root initramfs with cpud
       run: |
-        cd cpu
+        cd build/repos/cpu
         echo "Creating u-root initramfs with cpud as init..."
-        mkdir -p ../initramfs
+        mkdir -p ../../initramfs
         
         # Build the initramfs with cpud bundled in as init
         echo "Building initramfs with u-root..."
-        GOOS=linux GOARCH=arm64 ../u-root-bin -format=cpio -o ../initramfs/cpud-initramfs.cpio \
+        GOOS=linux GOARCH=arm64 ../../u-root-bin -format=cpio -o ../../initramfs/cpud-initramfs.cpio \
             -initcmd="cpud" \
             ./cmds/cpud \
             ../u-root/cmds/core/ls \
@@ -101,31 +102,31 @@ jobs:
             ../u-root/cmds/core/gosh
         
         echo "Compressing initramfs..."
-        gzip -9 ../initramfs/cpud-initramfs.cpio
+        gzip -9 ../../initramfs/cpud-initramfs.cpio
         
         echo "Initramfs created successfully:"
-        ls -la ../initramfs/
-        file ../initramfs/cpud-initramfs.cpio.gz
+        ls -la ../../initramfs/
+        file ../../initramfs/cpud-initramfs.cpio.gz
     
     - name: Verify binaries
       run: |
         echo "Verifying built binaries..."
-        ls -la binaries/
+        ls -la build/binaries/
         echo "CPU binary info:"
-        file binaries/cpu
+        file build/binaries/cpu
         echo "CPUD binary info:"
-        file binaries/cpud
+        file build/binaries/cpud
         echo "Binary sizes:"
-        du -h binaries/*
+        du -h build/binaries/*
         echo
         echo "Initramfs info:"
-        ls -la initramfs/
+        ls -la build/initramfs/
         echo "Initramfs size:"
-        du -h initramfs/*
+        du -h build/initramfs/*
     
     - name: Create build info
       run: |
-        cd binaries
+        cd build/binaries
         echo "U-Root CPU Binaries for aarch64" > BUILD_INFO.txt
         echo "Built on: $(date -u)" >> BUILD_INFO.txt
         echo "CPU version: $CPU_VERSION" >> BUILD_INFO.txt
@@ -148,7 +149,7 @@ jobs:
     
     - name: Create checksums
       run: |
-        cd binaries
+        cd build/binaries
         echo "Creating checksums..."
         sha256sum cpu > cpu.sha256
         sha256sum cpud > cpud.sha256
@@ -163,11 +164,11 @@ jobs:
     
     - name: Create tarball
       run: |
-        cd binaries
+        cd build/binaries
         cp ../initramfs/cpud-initramfs.cpio.gz .
         cp ../initramfs/cpud-initramfs.cpio.gz.sha256 .
-        tar -czf ../cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz *
-        cd ..
+        tar -czf ../../cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz *
+        cd ../..
         echo "Tarball created:"
         ls -la cpu-binaries-aarch64-*.tar.gz
         sha256sum cpu-binaries-aarch64-*.tar.gz > cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz.sha256
@@ -177,8 +178,8 @@ jobs:
       with:
         name: cpu-binaries-aarch64-${{ env.CPU_VERSION }}
         path: |
-          binaries/
-          initramfs/
+          build/binaries/
+          build/initramfs/
           cpu-binaries-aarch64-*.tar.gz
           cpu-binaries-aarch64-*.tar.gz.sha256
         retention-days: 90
@@ -191,20 +192,20 @@ jobs:
         echo "CPU_VERSION: ${{ env.CPU_VERSION }}"
         echo
         echo "Binaries directory:"
-        ls -la binaries/ || echo "binaries/ directory not found"
+        ls -la build/binaries/ || echo "build/binaries/ directory not found"
         echo
         echo "Initramfs directory:"
-        ls -la initramfs/ || echo "initramfs/ directory not found"
+        ls -la build/initramfs/ || echo "build/initramfs/ directory not found"
         echo
         echo "Tarball files:"
         ls -la cpu-binaries-aarch64-*.tar.gz || echo "No tarball files found"
         ls -la cpu-binaries-aarch64-*.tar.gz.sha256 || echo "No tarball checksum files found"
         echo
         echo "Checking specific files for release:"
-        [ -f "binaries/cpu" ] && echo "✓ binaries/cpu exists" || echo "✗ binaries/cpu missing"
-        [ -f "binaries/cpud" ] && echo "✓ binaries/cpud exists" || echo "✗ binaries/cpud missing"
-        [ -f "binaries/BUILD_INFO.txt" ] && echo "✓ binaries/BUILD_INFO.txt exists" || echo "✗ binaries/BUILD_INFO.txt missing"
-        [ -f "binaries/cpud-initramfs.cpio.gz" ] && echo "✓ binaries/cpud-initramfs.cpio.gz exists" || echo "✗ binaries/cpud-initramfs.cpio.gz missing"
+        [ -f "build/binaries/cpu" ] && echo "✓ build/binaries/cpu exists" || echo "✗ build/binaries/cpu missing"
+        [ -f "build/binaries/cpud" ] && echo "✓ build/binaries/cpud exists" || echo "✗ build/binaries/cpud missing"
+        [ -f "build/binaries/BUILD_INFO.txt" ] && echo "✓ build/binaries/BUILD_INFO.txt exists" || echo "✗ build/binaries/BUILD_INFO.txt missing"
+        [ -f "build/binaries/cpud-initramfs.cpio.gz" ] && echo "✓ build/binaries/cpud-initramfs.cpio.gz exists" || echo "✗ build/binaries/cpud-initramfs.cpio.gz missing"
         [ -f "cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz" ] && echo "✓ tarball exists" || echo "✗ tarball missing"
     
     - name: Create release (manual or on tag)
@@ -214,14 +215,14 @@ jobs:
         tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
         name: CPU Binaries ${{ github.event.inputs.release_tag || github.ref_name }}
         files: |
-          binaries/cpu
-          binaries/cpud
-          binaries/BUILD_INFO.txt
-          binaries/cpu.sha256
-          binaries/cpud.sha256
-          binaries/BUILD_INFO.txt.sha256
-          binaries/cpud-initramfs.cpio.gz
-          binaries/cpud-initramfs.cpio.gz.sha256
+          build/binaries/cpu
+          build/binaries/cpud
+          build/binaries/BUILD_INFO.txt
+          build/binaries/cpu.sha256
+          build/binaries/cpud.sha256
+          build/binaries/BUILD_INFO.txt.sha256
+          build/binaries/cpud-initramfs.cpio.gz
+          build/binaries/cpud-initramfs.cpio.gz.sha256
           cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz
           cpu-binaries-aarch64-${{ env.CPU_VERSION }}.tar.gz.sha256
           cpu-binaries-aarch64-*.tar.gz.sha256

@@ -1,5 +1,6 @@
 # Ignore build artifacts if built locally
 binaries/
+build/
 *.tar.gz
 *.zip
 

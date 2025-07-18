@@ -118,6 +118,42 @@ sudo cp cpud-initramfs.cpio.gz /boot/
 # Update GRUB/U-Boot configuration
 ```
 
+## Local Development
+
+### Building from Source
+```bash
+# Clone the repository
+git clone https://github.com/ericvh/cpu-prebuilt.git
+cd cpu-prebuilt
+
+# Build binaries (requires Go 1.21+)
+./build.sh
+
+# Clean build artifacts
+./build.sh clean
+
+# Install locally built binaries
+./install.sh --local
+```
+
+### Build Directory Structure
+```
+build/
+├── binaries/          # Compiled binaries
+│   ├── cpu
+│   ├── cpud
+│   └── BUILD_INFO.txt
+├── initramfs/         # Initramfs files
+│   └── cpud-initramfs.cpio.gz
+├── repos/             # Source repositories
+│   ├── cpu/           # u-root/cpu source
+│   └── u-root/        # u-root/u-root source
+├── go.work            # Go workspace file
+└── u-root-bin         # Built u-root binary
+```
+
+All build artifacts are stored in the `build/` directory and excluded from git via `.gitignore`.
+
 ## What this does
 
 This repository uses GitHub Actions to:

@@ -16,18 +16,20 @@ NC='\033[0m' # No Color
 
 print_usage() {
     echo "Usage: $0 [OPTIONS]"
-    echo "Install CPU binaries from GitHub releases"
+    echo "Install CPU binaries from GitHub releases or local build"
     echo ""
     echo "Options:"
     echo "  -v, --version VERSION    Install specific version (e.g., v1.0.0)"
     echo "  -d, --dir DIRECTORY      Install to custom directory (default: $INSTALL_DIR)"
     echo "  -l, --list              List available releases"
+    echo "  --local                 Install from local build directory"
     echo "  -h, --help              Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0                      # Install latest release"
     echo "  $0 -v v1.0.0           # Install specific version"
     echo "  $0 -d ~/.local/bin      # Install to custom directory"
+    echo "  $0 --local              # Install from local build"
     echo "  $0 -l                   # List available releases"
 }
 
@@ -102,9 +104,46 @@ install_binaries() {
     echo "  cpud -h   # Show CPU daemon help"
 }
 
+install_local_binaries() {
+    local install_dir="$1"
+    
+    echo -e "${YELLOW}Installing CPU binaries from local build to $install_dir${NC}"
+    
+    # Check if local build exists
+    if [ ! -f "build/binaries/cpu" ] || [ ! -f "build/binaries/cpud" ]; then
+        echo -e "${RED}Error: Local build not found in build/binaries/${NC}"
+        echo "Please run './build.sh' first to build the binaries"
+        exit 1
+    fi
+    
+    # Create install directory if it doesn't exist
+    mkdir -p "$install_dir"
+    
+    # Copy binaries
+    echo "Installing CPU client binary..."
+    cp "build/binaries/cpu" "$install_dir/"
+    
+    echo "Installing CPU daemon binary..."
+    cp "build/binaries/cpud" "$install_dir/"
+    
+    # Make executable
+    chmod +x "$install_dir/cpu" "$install_dir/cpud"
+    
+    echo -e "${GREEN}✓ Local installation complete${NC}"
+    echo ""
+    echo "Installed binaries:"
+    echo "  $install_dir/cpu"
+    echo "  $install_dir/cpud"
+    echo ""
+    echo "Usage:"
+    echo "  cpu -h    # Show CPU client help"
+    echo "  cpud -h   # Show CPU daemon help"
+}
+
 # Parse command line arguments
 VERSION=""
 LIST_RELEASES=false
+LOCAL_INSTALL=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -118,6 +157,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -l|--list)
             LIST_RELEASES=true
+            shift
+            ;;
+        --local)
+            LOCAL_INSTALL=true
             shift
             ;;
         -h|--help)
@@ -135,6 +178,12 @@ done
 # Main logic
 if [ "$LIST_RELEASES" = true ]; then
     list_releases
+    exit 0
+fi
+
+# Handle local installation
+if [ "$LOCAL_INSTALL" = true ]; then
+    install_local_binaries "$INSTALL_DIR"
     exit 0
 fi
 

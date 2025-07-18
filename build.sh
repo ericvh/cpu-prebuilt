@@ -4,8 +4,17 @@ set -e
 # Local build script for CPU binaries
 # This script mirrors what the GitHub Action does
 
+# Check for clean argument
+if [ "$1" = "clean" ]; then
+    echo "Cleaning build directory..."
+    rm -rf build/
+    echo "Build directory cleaned."
+    exit 0
+fi
+
 echo "=== CPU Prebuilt Local Build Script ==="
 echo "This script builds cpu and cpud binaries for aarch64"
+echo "Use './build.sh clean' to remove build artifacts"
 echo
 
 # Check if Go is installed
@@ -19,39 +28,40 @@ GO_VERSION=$(go version | cut -d' ' -f3 | sed 's/go//')
 echo "Using Go version: $GO_VERSION"
 
 # Create output directory
-mkdir -p binaries
-rm -f binaries/*
+mkdir -p build/binaries build/initramfs build/repos
+rm -f build/binaries/*
+rm -f build/initramfs/*
 
 echo "Cloning u-root/cpu repository..."
-if [ -d "cpu" ]; then
+if [ -d "build/repos/cpu" ]; then
     echo "cpu directory already exists, updating..."
-    cd cpu
+    cd build/repos/cpu
     git pull
-    cd ..
+    cd ../../..
 else
-    git clone https://github.com/u-root/cpu.git
+    git clone https://github.com/u-root/cpu.git build/repos/cpu
 fi
 
 echo "Cloning u-root/u-root repository..."
-if [ -d "u-root" ]; then
+if [ -d "build/repos/u-root" ]; then
     echo "u-root directory already exists, updating..."
-    cd u-root
+    cd build/repos/u-root
     git pull
-    cd ..
+    cd ../../..
 else
-    git clone https://github.com/u-root/u-root.git
+    git clone https://github.com/u-root/u-root.git build/repos/u-root
 fi
 
 # Set up Go workspace
 echo "Setting up Go workspace..."
-cat > go.work << EOF
+cat > build/go.work << EOF
 go 1.24.0
 
-use ./cpu
-use ./u-root
+use ./repos/cpu
+use ./repos/u-root
 EOF
 
-cd cpu
+cd build/repos/cpu
 
 # Get version info
 CPU_VERSION=$(git describe --tags --always)
@@ -64,24 +74,23 @@ go mod download
 # Build u-root from source
 echo "Building u-root from source..."
 cd ../u-root
-go build -o ../u-root-bin ./
+go build -o ../../u-root-bin ./
 cd ../cpu
 
 # Build cpu binary
 echo "Building cpu binary for aarch64..."
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpu ./cmds/cpu
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../binaries/cpu ./cmds/cpu
 
 # Build cpud binary
 echo "Building cpud binary for aarch64..."
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../binaries/cpud ./cmds/cpud
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../binaries/cpud ./cmds/cpud
 
 # Create u-root initramfs with cpud
 echo "Creating u-root initramfs with cpud as init..."
-mkdir -p ../initramfs
 
 # Build the initramfs with cpud bundled in as init
 echo "Building initramfs with u-root..."
-GOOS=linux GOARCH=arm64 ../u-root-bin -format=cpio -o ../initramfs/cpud-initramfs.cpio \
+GOOS=linux GOARCH=arm64 ../../u-root-bin -format=cpio -o ../../initramfs/cpud-initramfs.cpio \
     -initcmd="cpud" \
     ./cmds/cpud \
     ../u-root/cmds/core/ls \
@@ -91,33 +100,33 @@ GOOS=linux GOARCH=arm64 ../u-root-bin -format=cpio -o ../initramfs/cpud-initramf
     ../u-root/cmds/core/gosh
 
 echo "Compressing initramfs..."
-gzip -9 ../initramfs/cpud-initramfs.cpio
+gzip -9 ../../initramfs/cpud-initramfs.cpio
 
 echo "Initramfs created successfully:"
-ls -la ../initramfs/
+ls -la ../../initramfs/
 
-cd ..
+cd ../../..
 
 # Verify binaries
 echo "Verifying built binaries..."
-ls -la binaries/
+ls -la build/binaries/
 echo
 echo "CPU binary info:"
-file binaries/cpu
+file build/binaries/cpu
 echo "CPUD binary info:"
-file binaries/cpud
+file build/binaries/cpud
 echo
 echo "Binary sizes:"
-du -h binaries/*
+du -h build/binaries/*
 echo
 echo "Initramfs info:"
-ls -la initramfs/
+ls -la build/initramfs/
 echo "Initramfs size:"
-du -h initramfs/*
+du -h build/initramfs/*
 
 # Create build info
 echo "Creating build info..."
-cd binaries
+cd build/binaries
 cat > BUILD_INFO.txt << EOF
 U-Root CPU Binaries for aarch64 (Local Build)
 Built on: $(date -u)
@@ -141,15 +150,15 @@ Initramfs usage:
 Build script: ../build.sh
 EOF
 
-cd ..
+cd ../..
 
 echo
 echo "=== Build Complete ==="
-echo "Binaries are available in the 'binaries/' directory:"
-ls -la binaries/
+echo "Binaries are available in the 'build/binaries/' directory:"
+ls -la build/binaries/
 echo
-echo "Initramfs is available in the 'initramfs/' directory:"
-ls -la initramfs/
+echo "Initramfs is available in the 'build/initramfs/' directory:"
+ls -la build/initramfs/
 echo
 echo "To use the binaries on an aarch64 system:"
 echo "1. Copy the binaries to your target system"

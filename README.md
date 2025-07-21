@@ -79,7 +79,8 @@ export PATH=$PATH:$GOPATH/bin
 go install github.com/u-root/cpu/cmds/cpu@latest
 
 # Start it, but only map home directory
-PWD=${PWD/\/Users/\/home} cpu -sp 17010 -key ~/src/test-cpu/identity -namespace "/home=/Users" raspberrypi.local /bin/bash
+PWD=${PWD/\/Users/\/home} cpu -sp 17010 -key ~/src/test-cpu/identity -namespace "/home=/Users" -nfs \
+raspberrypi.local /bin/bash
 ```
 
 # NOTE: All other instructions below this line are currently being tested & debugged

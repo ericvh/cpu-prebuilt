@@ -60,6 +60,28 @@ wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity
   raspberrypi.local /bin/bash
 ```
 
+### On Mac (native)
+
+Since Mac binaries won't run natively on a linux target, this can be used
+to be able to access directories on the host machine (Mac), but not necessarily
+binaries or tools.  You could use this to be able to run python scripts, etc.
+developed locally on your laptop on the target assuming the runtimes were already
+installed there.  If stuff isn't installed, you are better off with something like
+the docker formulations.
+
+```bash
+# If you haven't installed Go already, get that setup
+brew install go git
+export GOPATH=$HOME/go
+export PATH=$PATH:$GOPATH/bin
+
+# Install native cpu
+go install github.com/u-root/cpu/cmds/cpu@latest
+
+# Start it, but only map home directory
+PWD=${PWD/\/Users/\/home} cpu -sp 17010 -key ~/src/test-cpu/identity -namespace "/home=/Users" raspberrypi.local /bin/bash
+```
+
 # NOTE: All other instructions below this line are currently being tested & debugged
 
 ## Quick Install (on Linux)

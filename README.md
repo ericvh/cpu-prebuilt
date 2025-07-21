@@ -2,7 +2,67 @@
 
 This project provides prebuilt binaries for u-root/cpu and u-root/cpud targeting aarch64 architecture.
 
-## Quick Install
+
+## Quick Start (on Mac with Raspberry Pi target)
+
+*NOTE*: Replace the version (v0.0.4) with the latest release
+and use your own public/private key pair for security.
+
+### On target (Raspberry Pi)
+
+```bash
+# Grab pre-built cpud & public key
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud
+chmod ugo+x cpud
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity.pub
+# Start cpud (must be run as root)
+sudo ./cpud -pk identity.pub
+```
+
+### On Mac
+
+```bash
+# Grab pre-built cpu & key
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu
+chmod ugo+x cpu
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity
+# Start a docker, bind in cpu, and use it to launch on target
+# This assumes you are operating out of your home directory
+# and maps /Users on OSX to /home on the target.
+# replace raspberrypi.local with either your pi's hostname
+# or IP address 
+docker run -i -t -v ${HOME}:${HOME/\Users/\/home} -e PWD=${PWD/\/Users/\/home} \
+  -v ./identity:/etc/cpu/identity -v ./cpu:/usr/bin/cpu \
+  ubuntu:latest \
+  /usr/bin/cpu -nfs -sp 17010 -key /etc/cpu/identity \
+  -namespace "/lib:/usr:/bin:/home:/etc" \
+  raspberrypi.local /bin/bash
+```
+
+### On Mac from inside a devcontainer
+
+This is pretty much like the above, except you'll want to make sure you have already
+created a mount point for /workspaces on the target
+
+```bash
+# Grab pre-built cpu & key
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu
+chmod ugo+x cpu
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity
+# first time - create workspaces directory on target if it doesn't already exist
+# /tmp/local is the full root of the target device
+/usr/bin/cpu -nfs -sp 17010 -key /etc/cpu/identity \
+  -namespace "/lib:/usr:/bin:/home:/etc:/workspaces" \
+  raspberrypi.local mkdir -p /tmp/local/workspaces
+# Start cpu
+/usr/bin/cpu -nfs -sp 17010 -key /etc/cpu/identity \
+  -namespace "/lib:/usr:/bin:/home:/etc:/workspaces" \
+  raspberrypi.local /bin/bash
+```
+
+# NOTE: All other instructions below this line are currently being tested & debugged
+
+## Quick Install (on Linux)
 
 ```bash
 # Install latest release
@@ -43,7 +103,7 @@ curl -fsSL https://raw.githubusercontent.com/ericvh/cpu-prebuilt/main/install.sh
 
 ### Option 1: Install Script (Easiest)
 ```bash
-# Download and run installer
+# Download and run installer (binaries run on Linux aarch64 only for now)
 curl -fsSL https://raw.githubusercontent.com/ericvh/cpu-prebuilt/main/install.sh | bash
 
 # Or download first, then run
@@ -54,30 +114,24 @@ chmod +x install.sh
 
 ### Option 2: Manual Download from Releases
 ```bash
-# Download individual binaries (replace VERSION with actual version)
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v1.0.0/cpu
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v1.0.0/cpud
+# Download individual binaries (replace VERSION with actual version) (this can be used with docker desktop)
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud
 
 # Make executable
 chmod +x cpu cpud
 
 # Verify checksums (optional)
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v1.0.0/cpu.sha256
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v1.0.0/cpud.sha256
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu.sha256
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud.sha256
 sha256sum -c cpu.sha256 cpud.sha256
 ```
 
 ### Option 3: Download Complete Archive
 ```bash
 # Download and verify archive
-VERSION="v1.0.0"  # Replace with desired version
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/$VERSION/cpu-binaries-aarch64-$VERSION.tar.gz
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/$VERSION/cpu-binaries-aarch64-$VERSION.tar.gz.sha256
-sha256sum -c cpu-binaries-aarch64-$VERSION.tar.gz.sha256
-
-# Extract
-tar -xzf cpu-binaries-aarch64-$VERSION.tar.gz
-chmod +x cpu cpud
+Go to https://github.com/ericvh/cpu-prebuilt/releases/tag/v0.0.4
+Download the archive cpu-binaries-aarch64-*.tar.gz 
 ```
 
 ### Option 4: Container Usage
@@ -126,14 +180,14 @@ sudo cp cpud-initramfs.cpio.gz /boot/
 git clone https://github.com/ericvh/cpu-prebuilt.git
 cd cpu-prebuilt
 
-# Build binaries (requires Go 1.21+)
-./build.sh
+# Build binaries (requires Go 1.24+)
+make
 
 # Clean build artifacts
-./build.sh clean
+make clean
 
 # Install locally built binaries
-./install.sh --local
+make install
 ```
 
 ### Build Directory Structure
@@ -206,11 +260,13 @@ curl -fsSL https://raw.githubusercontent.com/ericvh/cpu-prebuilt/main/install.sh
 # Download initramfs
 wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpud-initramfs.cpio.gz
 
-# Boot with QEMU (example)
+# Boot with QEMU (example - you need to get your aarch64 Image from elsewhere)
 qemu-system-aarch64 \
-  -kernel vmlinuz-aarch64 \
+  -kernel Image \
   -initrd cpud-initramfs.cpio.gz \
   -append "init=/init console=ttyAMA0" \
+  -netdev user,id=n1,hostfwd=tcp:0.0.0.0:17010-:17010,net=192.168.1.0/24,host=192.168.1.1 \
+  -device virtio-net-pci,netdev=n1 \
   -machine virt -cpu cortex-a57 -m 1024M -nographic
 
 # Or boot on Raspberry Pi

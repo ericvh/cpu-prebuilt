@@ -10,6 +10,11 @@ on:
         description: 'Tag to package (e.g., v1.0.0)'
         required: true
         type: string
+      architectures:
+        description: 'Architectures to build (comma-separated: aarch64,x86_64)'
+        required: false
+        default: 'aarch64,x86_64'
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -17,6 +22,99 @@ env:
 
 jobs:
   package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    strategy:
+      matrix:
+        arch: [aarch64, x86_64]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+    
+    - name: Build everything using Makefile
+      run: |
+        echo "Building CPU binaries and initramfs for ${{ matrix.arch }} using Makefile..."
+        make ARCH=${{ matrix.arch }} all
+        echo "Build completed successfully for ${{ matrix.arch }}!"
+    
+    - name: Get CPU version for metadata
+      run: |
+        cd build/repos/cpu
+        echo "CPU_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
+    
+    - name: Map architecture for Docker
+      run: |
+        case "${{ matrix.arch }}" in
+          aarch64)
+            echo "DOCKER_ARCH=arm64" >> $GITHUB_ENV
+            ;;
+          x86_64)
+            echo "DOCKER_ARCH=amd64" >> $GITHUB_ENV
+            ;;
+        esac
+        echo "Building for Docker architecture: ${{ env.DOCKER_ARCH }}"
+    
+    - name: Create Dockerfile for ${{ matrix.arch }}
+      run: |
+        cat > Dockerfile-${{ matrix.arch }} << 'EOF'
+        FROM scratch
+        COPY build/binaries/${{ matrix.arch }}/cpu /usr/local/bin/cpu
+        COPY build/binaries/${{ matrix.arch }}/cpud /usr/local/bin/cpud
+        COPY build/binaries/${{ matrix.arch }}/identity /etc/identity
+        COPY build/binaries/${{ matrix.arch }}/identity.pub /etc/identity.pub
+        COPY build/binaries/${{ matrix.arch }}/BUILD_INFO.txt /BUILD_INFO.txt
+        COPY build/initramfs/${{ matrix.arch }}/cpud-initramfs.cpio.gz /cpud-initramfs.cpio.gz
+        LABEL org.opencontainers.image.title="CPU Binaries"
+        LABEL org.opencontainers.image.description="Prebuilt CPU binaries for ${{ matrix.arch }} with SSH keys"
+        LABEL org.opencontainers.image.source="https://github.com/${{ github.repository }}"
+        LABEL org.opencontainers.image.version="${{ env.CPU_VERSION }}"
+        LABEL org.opencontainers.image.licenses="BSD-3-Clause"
+        LABEL org.opencontainers.image.architecture="${{ matrix.arch }}"
+        EOF
+    
+    - name: Extract metadata for ${{ matrix.arch }}
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=tag,suffix=-${{ matrix.arch }}
+          type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
+          type=raw,value=${{ env.CPU_VERSION }}-${{ matrix.arch }}
+    
+    - name: Build and push Docker image for ${{ matrix.arch }}
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile-${{ matrix.arch }}
+        platforms: linux/${{ env.DOCKER_ARCH }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha,scope=${{ matrix.arch }}
+        cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+
+  create-manifest:
+    needs: package
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -36,56 +134,53 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=tag
-          type=raw,value=latest,enable={{is_default_branch}}
-    
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.21'
-    
-    - name: Build everything using Makefile
+    - name: Get CPU version and tag info
       run: |
-        echo "Building CPU binaries and initramfs using Makefile..."
-        make all
-        echo "Build completed successfully!"
+        if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" =~ refs/tags/.* ]]; then
+          TAG_NAME="${{ github.ref_name }}"
+        else
+          TAG_NAME="${{ github.event.inputs.tag }}"
+        fi
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+        echo "CPU_VERSION=${TAG_NAME#v}" >> $GITHUB_ENV
     
-    - name: Get CPU version for metadata
+    - name: Create and push multi-architecture manifest
       run: |
-        cd build/repos/cpu
-        echo "CPU_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
-    
-    - name: Create Dockerfile
-      run: |
-        cat > Dockerfile << 'EOF'
-        FROM scratch
-        COPY build/binaries/cpu /usr/local/bin/cpu
-        COPY build/binaries/cpud /usr/local/bin/cpud
-        COPY build/binaries/identity /etc/identity
-        COPY build/binaries/identity.pub /etc/identity.pub
-        COPY build/binaries/BUILD_INFO.txt /BUILD_INFO.txt
-        COPY build/initramfs/cpud-initramfs.cpio.gz /cpud-initramfs.cpio.gz
-        LABEL org.opencontainers.image.title="CPU Binaries"
-        LABEL org.opencontainers.image.description="Prebuilt CPU binaries for aarch64 with SSH keys"
-        LABEL org.opencontainers.image.source="https://github.com/${{ github.repository }}"
-        LABEL org.opencontainers.image.version="${{ env.CPU_VERSION }}"
-        LABEL org.opencontainers.image.licenses="BSD-3-Clause"
-        EOF
-    
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        platforms: linux/arm64
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        # Create manifest for latest tag (without architecture suffix)
+        docker manifest create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-aarch64 \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-x86_64
+        
+        docker manifest annotate ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-aarch64 --arch arm64
+        
+        docker manifest annotate ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-x86_64 --arch amd64
+        
+        docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        
+        # Create manifest for tag (if this is a tag push)
+        if [ -n "${{ env.TAG_NAME }}" ]; then
+          docker manifest create ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}-aarch64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}-x86_64
+          
+          docker manifest annotate ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}-aarch64 --arch arm64
+          
+          docker manifest annotate ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}-x86_64 --arch amd64
+          
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}
+        fi
+        
+        echo "Multi-architecture manifests created and pushed"
+        echo "Available tags:"
+        echo "- ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest (multi-arch)"
+        echo "- ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-aarch64"
+        echo "- ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-x86_64"
+        if [ -n "${{ env.TAG_NAME }}" ]; then
+          echo "- ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }} (multi-arch)"
+          echo "- ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}-aarch64"
+          echo "- ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}-x86_64"
+        fi

@@ -1,20 +1,35 @@
 # CPU Prebuilt Binaries
 
-This project provides prebuilt binaries for u-root/cpu and u-root/cpud targeting aarch64 architecture.
+This project provides prebuilt binaries for u-root/cpu and u-root/cpud targeting multiple architectures (aarch64 and x86_64).
 
 
-## Quick Start (on Mac with Raspberry Pi target)
+## Quick Start
 
 *NOTE*: Replace the version (v0.0.4) with the latest release
 and use your own public/private key pair for security.
 
-### On target (Raspberry Pi)
+### On target (Raspberry Pi - aarch64)
 
 ```bash
-# Grab pre-built cpud & public key
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud
-chmod ugo+x cpud
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity.pub
+# Grab pre-built cpud & public key for aarch64
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud-aarch64
+chmod ugo+x cpud-aarch64
+mv cpud-aarch64 cpud
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity.pub-aarch64
+mv identity.pub-aarch64 identity.pub
+# Start cpud (must be run as root)
+sudo ./cpud -pk identity.pub
+```
+
+### On target (x86_64 system)
+
+```bash
+# Grab pre-built cpud & public key for x86_64
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud-x86_64
+chmod ugo+x cpud-x86_64
+mv cpud-x86_64 cpud
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity.pub-x86_64
+mv identity.pub-x86_64 identity.pub
 # Start cpud (must be run as root)
 sudo ./cpud -pk identity.pub
 ```
@@ -29,11 +44,20 @@ to access Linux so we are sticking to describing using it with containers for
 first.
 
 ```bash
-# Grab pre-built cpu & key
+# Grab pre-built cpu & key (choose architecture)
+# For aarch64 (ARM64) systems:
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu-aarch64
+chmod ugo+x cpu-aarch64
+mv cpu-aarch64 cpu
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity-aarch64
+mv identity-aarch64 identity
 
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu
-chmod ugo+x cpu
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity
+# For x86_64 (AMD64) systems:
+# wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu-x86_64
+# chmod ugo+x cpu-x86_64
+# mv cpu-x86_64 cpu
+# wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity-x86_64
+# mv identity-x86_64 identity
 # Start a docker, bind in cpu, and use it to launch on target
 # This assumes you are operating out of your home directory
 # and maps /Users on OSX to /home on the target.
@@ -53,10 +77,13 @@ This is pretty much like the above, except you'll want to make sure you have alr
 created a mount point for /workspaces on the target
 
 ```bash
-# Grab pre-built cpu & key
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu
-chmod ugo+x cpu
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity
+# Grab pre-built cpu & key (choose architecture)
+# For aarch64 (ARM64) systems:
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu-aarch64
+chmod ugo+x cpu-aarch64
+mv cpu-aarch64 cpu
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity-aarch64
+mv identity-aarch64 identity
 # first time - create workspaces directory on target if it doesn't already exist
 # /tmp/local is the full root of the target device
 /usr/bin/cpu -nfs -sp 17010 -key /etc/cpu/identity \
@@ -175,24 +202,34 @@ chmod +x install.sh
 
 ### Option 2: Manual Download from Releases
 ```bash
-# Download individual binaries (replace VERSION with actual version) (this can be used with docker desktop)
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud
+# Choose your architecture and download binaries
+# For aarch64 (ARM64):
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu-aarch64
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud-aarch64
+mv cpu-aarch64 cpu && mv cpud-aarch64 cpud
+
+# For x86_64 (AMD64):
+# wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu-x86_64
+# wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud-x86_64
+# mv cpu-x86_64 cpu && mv cpud-x86_64 cpud
 
 # Make executable
 chmod +x cpu cpud
 
 # Verify checksums (optional)
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu.sha256
-wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud.sha256
-sha256sum -c cpu.sha256 cpud.sha256
+# For aarch64:
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu-aarch64.sha256
+wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpud-aarch64.sha256
+sha256sum -c cpu-aarch64.sha256 cpud-aarch64.sha256
 ```
 
 ### Option 3: Download Complete Archive
 ```bash
-# Download and verify archive
-Go to https://github.com/ericvh/cpu-prebuilt/releases/tag/v0.0.4
-Download the archive cpu-binaries-aarch64-*.tar.gz 
+# Download and verify architecture-specific archive
+# Go to https://github.com/ericvh/cpu-prebuilt/releases/tag/v0.0.4
+# Download the appropriate archive:
+# - cpu-binaries-aarch64-*.tar.gz (for ARM64 systems)
+# - cpu-binaries-x86_64-*.tar.gz (for x86-64 systems)
 ```
 
 ### Option 4: Container Usage
@@ -213,24 +250,38 @@ docker rm cpu-container
 
 ### Option 5: Initramfs Boot (Minimal System)
 ```bash
-# Download initramfs
-wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpud-initramfs.cpio.gz
+# Download initramfs for your architecture
+# For aarch64:
+wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpud-initramfs-aarch64.cpio.gz
+wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpud-initramfs-aarch64.cpio.gz.sha256
+sha256sum -c cpud-initramfs-aarch64.cpio.gz.sha256
 
-# Verify checksum
-wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpud-initramfs.cpio.gz.sha256
-sha256sum -c cpud-initramfs.cpio.gz.sha256
+# For x86_64:
+# wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpud-initramfs-x86_64.cpio.gz
+# wget https://github.com/ericvh/cpu-prebuilt/releases/latest/download/cpud-initramfs-x86_64.cpio.gz.sha256
+# sha256sum -c cpud-initramfs-x86_64.cpio.gz.sha256
 
-# Use with kernel (QEMU example)
+# Use with kernel (QEMU examples)
+# For aarch64:
 qemu-system-aarch64 \
   -kernel vmlinuz-aarch64 \
-  -initrd cpud-initramfs.cpio.gz \
+  -initrd cpud-initramfs-aarch64.cpio.gz \
   -append "init=/init console=ttyAMA0" \
   -machine virt -cpu cortex-a57 -m 1024M -nographic \
   -netdev vmnet-shared \ #,id=net0,hostfwd=tcp:127.0.0.1:17010-:17010,net=192.168.1.0/24,host=192.168.1.1 \
   #-device virtio-net-device,netdev=net0  
 
+# For x86_64:
+# qemu-system-x86_64 \
+#   -kernel vmlinuz-x86_64 \
+#   -initrd cpud-initramfs-x86_64.cpio.gz \
+#   -append "init=/init console=ttyS0" \
+#   -machine pc -m 1024M -nographic \
+#   -netdev user,id=net0,hostfwd=tcp:127.0.0.1:17010-:17010 \
+#   -device virtio-net-pci,netdev=net0
+
 # Physical hardware: copy to /boot and update bootloader
-sudo cp cpud-initramfs.cpio.gz /boot/
+sudo cp cpud-initramfs-<arch>.cpio.gz /boot/
 # Update GRUB/U-Boot configuration
 ```
 
@@ -274,11 +325,11 @@ All build artifacts are stored in the `build/` directory and excluded from git v
 
 This repository uses GitHub Actions to:
 - Build `cpu` and `cpud` from the [u-root/cpu](https://github.com/u-root/cpu) project
-- Cross-compile for aarch64 (ARM64) architecture
-- Create u-root initramfs that boots directly into cpud
+- Cross-compile for multiple architectures (aarch64/ARM64 and x86_64/AMD64)
+- Create u-root initramfs that boots directly into cpud for each architecture
 - Package the binaries as downloadable artifacts
-- Create GitHub releases with checksums
-- Publish container images to GitHub Packages
+- Create GitHub releases with checksums for all architectures
+- Publish multi-architecture container images to GitHub Packages
 - Automatically rebuild on new releases or manual triggers
 
 ## Usage
@@ -346,9 +397,11 @@ docker run --rm ghcr.io/ericvh/cpu-prebuilt:latest /usr/local/bin/cpud -h
 
 ## Architecture
 
-- **Target Architecture**: aarch64 (ARM64)
+- **Target Architectures**: 
+  - aarch64 (ARM64) - Raspberry Pi, Apple Silicon, AWS Graviton
+  - x86_64 (AMD64) - Intel/AMD systems, most cloud instances
 - **Source**: [u-root/cpu](https://github.com/u-root/cpu)
-- **Build Tool**: Go cross-compilation
+- **Build Tool**: Go cross-compilation with multi-architecture support
 - **Distribution**: GitHub Releases, GitHub Packages, Artifacts
 
 ## Security

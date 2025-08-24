@@ -158,9 +158,8 @@ $(INITRAMFS_FILE): $(CPUD_BINARY) $(UROOT_BIN) $(SSH_PUBLIC_KEY)
 	@rm -f $(INITRAMFS_DIR)/*
 	@echo "Building initramfs with u-root..."
 	@cd $(CPU_REPO) && GOOS=$(GOOS) GOARCH=$(GOARCH) ../../u-root-bin -format=cpio -o ../../initramfs/cpud-initramfs.cpio \
-		-files "../../binaries/identity.pub:etc/identity.pub" \
+		-files "../../binaries/identity.pub:key.pub" \
 		-initcmd="cpud" \
-		-uinitcmd="cpud -pk /etc/identity.pub" \
 		./cmds/cpud \
 		../u-root/cmds/core/ls \
 		../u-root/cmds/core/ip \

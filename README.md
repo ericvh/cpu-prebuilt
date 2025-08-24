@@ -21,8 +21,16 @@ sudo ./cpud -pk identity.pub
 
 ### On Mac
 
+*NOTE*: You are grabbing a statically linked linux version of these binaries,
+you wont be able to run directly on OSX, but you can bind these into a Linux
+docker container in order to use them as will be shown below.  It is possible
+to run cpu directly on the mac, but its utility is diminished when using it
+to access Linux so we are sticking to describing using it with containers for
+first.
+
 ```bash
 # Grab pre-built cpu & key
+
 wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/cpu
 chmod ugo+x cpu
 wget https://github.com/ericvh/cpu-prebuilt/releases/download/v0.0.4/identity
@@ -83,8 +91,36 @@ PWD=${PWD/\/Users/\/home} cpu -sp 17010 -key ~/src/test-cpu/identity -namespace 
 raspberrypi.local /bin/bash
 ```
 
-# NOTE: All other instructions below this line are currently being tested & debugged
+### With qemu on Mac
 
+This requires you to pull your own kernel which is capable of running as a guest
+
+```bash
+sudo qemu-system-aarch64 -kernel Image \
+  -initrd cpud-initramfs.cpio.gz \
+  --append "init=/init console=ttyAMA0 ip=dhcp" \
+  -machine virt -cpu cortex-a57 -m 1024M -nographic \
+  -netdev vmnet-shared,id=n1 -device virtio-net-pci,netdev=n1
+```
+
+Then in a different window you can start cpu with docker (or use one of the other methods, but using the native
+method won't work as expected because only the builtin commands will be available)
+
+```bash
+docker run -i -t -v ${HOME}:${HOME/\Users/\/home} -e PWD=${PWD/\/Users/\/home} \
+  -v ./identity:/etc/cpu/identity -v ./cpu:/usr/bin/cpu \
+  ubuntu:latest \
+  /usr/bin/cpu -nfs -sp 17010 -key /etc/cpu/identity \
+  -namespace "/lib:/usr:/bin:/home:/etc" \
+  192.168.64.2 /bin/bash
+```
+
+#### Here's the invocation I actually used on my mac
+sudo qemu-system-aarch64 -kernel ~/images/Image -initrd ../cpu-prebuilt/build/initramfs/cpud-initramfs.cpio.gz --append "init=/init console=ttyAMA0 ip=dhcp" -machine virt -cpu cortex-a57 -accel hvf -m 1024M -nographic \
+  -netdev user,id=n1,hostfwd=tcp::17010-:17010 -device virtio-net-pci,netdev=n1
+
+  -- but it requires you to know the ip address to use, decpu might work better but we can't do it from docker so that's less useful
+  
 ## Quick Install (on Linux)
 
 ```bash
@@ -121,6 +157,8 @@ curl -fsSL https://raw.githubusercontent.com/ericvh/cpu-prebuilt/main/install.sh
 ### 🛠️ **GitHub Actions Artifacts**
 - **Development builds**: Available for every commit
 - **90-day retention**: Temporary artifacts for testing
+
+# NOTE: All other instructions below this line are currently being tested & debugged
 
 ## Installation Options
 
@@ -188,7 +226,8 @@ qemu-system-aarch64 \
   -initrd cpud-initramfs.cpio.gz \
   -append "init=/init console=ttyAMA0" \
   -machine virt -cpu cortex-a57 -m 1024M -nographic \
-  -netdev user,id=net0 -device virtio-net-device,netdev=net0
+  -netdev vmnet-shared \ #,id=net0,hostfwd=tcp:127.0.0.1:17010-:17010,net=192.168.1.0/24,host=192.168.1.1 \
+  #-device virtio-net-device,netdev=net0  
 
 # Physical hardware: copy to /boot and update bootloader
 sudo cp cpud-initramfs.cpio.gz /boot/

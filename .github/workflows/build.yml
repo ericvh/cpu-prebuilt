@@ -150,7 +150,7 @@ jobs:
         mkdir -p release-files
         
         # Process each architecture
-        for arch in aarch64 x86_64; do
+        for arch in aarch64 arm riscv64 x86_64; do
           echo "Processing $arch..."
           artifact_dir="cpu-binaries-$arch-${{ env.CPU_VERSION }}"
           
